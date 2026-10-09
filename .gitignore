@@ -1,0 +1,58 @@
+# ==========================================
+# Logitech T650 Windows PTP Project .gitignore
+# ==========================================
+
+# Reference sub-projects / external clones
+logitec-t650-macos-driver/
+T650drivers/
+
+# Visual Studio & IDE files
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.opensdf
+*.sdf
+*.VC.db
+*.VC.opendb
+
+# Build Outputs (C# & C++)
+[Bb]in/
+[Oo]bj/
+x64/
+x86/
+ARM64/
+Debug/
+Release/
+ipch/
+
+# Driver Build Artifacts & Packages
+Package/
+*.sys
+*.cer
+*.cat
+*.inf
+_reboots.log
+*.wdf
+*.lastcodeanalysissucceeded
+DriverTest/
+
+# Logs & Temporary files
+*.log
+*.tlog
+*.tmp
+*.bak
+*.cache
+*.intermediate
+*.ilk
+*.pdb
+*.exp
+*.lib
+
+# OS generated files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
