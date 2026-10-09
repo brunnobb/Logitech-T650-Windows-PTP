@@ -145,24 +145,44 @@ class Program
         Console.WriteLine("[Tray] Taskbar notification icon added. Right-click icon for start/stop & controls.");
         Console.WriteLine("[Keys] Press 'r' anytime to re-wake/unlock | Press 'h' to hide/show console | Press 'q' to exit.");
 
+        bool canReadKey = false;
+        try
+        {
+            canReadKey = !Console.IsInputRedirected;
+        }
+        catch
+        {
+            canReadKey = false;
+        }
+
         while (!cts.IsCancellationRequested)
         {
-            if (Console.KeyAvailable)
+            if (canReadKey)
             {
-                var key = Console.ReadKey(intercept: true);
-                if (key.Key == ConsoleKey.R)
+                try
                 {
-                    Console.WriteLine("\n[User] Re-sending raw multi-touch unlock packet to T650...");
-                    receiver.UnlockRawMode();
+                    if (Console.KeyAvailable)
+                    {
+                        var key = Console.ReadKey(intercept: true);
+                        if (key.Key == ConsoleKey.R)
+                        {
+                            Console.WriteLine("\n[User] Re-sending raw multi-touch unlock packet to T650...");
+                            receiver.UnlockRawMode();
+                        }
+                        else if (key.Key == ConsoleKey.H)
+                        {
+                            tray.ToggleConsoleWindow();
+                        }
+                        else if (key.Key == ConsoleKey.Q)
+                        {
+                            cts.Cancel();
+                            break;
+                        }
+                    }
                 }
-                else if (key.Key == ConsoleKey.H)
+                catch (InvalidOperationException)
                 {
-                    tray.ToggleConsoleWindow();
-                }
-                else if (key.Key == ConsoleKey.Q)
-                {
-                    cts.Cancel();
-                    break;
+                    canReadKey = false;
                 }
             }
             Thread.Sleep(50);

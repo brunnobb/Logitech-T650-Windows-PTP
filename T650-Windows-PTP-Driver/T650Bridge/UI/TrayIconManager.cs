@@ -58,8 +58,16 @@ public class TrayIconManager : IDisposable
         _uiReady.WaitOne(3000);
     }
 
+    private SynchronizationContext? _syncContext;
+    private Control? _invoker;
+
     private void RunMessageLoop()
     {
+        _invoker = new Control();
+        IntPtr forceHandle = _invoker.Handle; // Forces Win32 window handle creation immediately
+        _syncContext = SynchronizationContext.Current ?? new WindowsFormsSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(_syncContext);
+
         IconGenerator.EnsureIcoFileExists(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "T650.ico"));
 
         using var bmpActive = IconGenerator.CreateTouchpadBitmap(32, Color.FromArgb(0, 220, 130), active: true);
@@ -120,12 +128,24 @@ public class TrayIconManager : IDisposable
         Application.Run();
     }
 
+    private void PostToUiThread(Action action)
+    {
+        if (_syncContext != null)
+        {
+            _syncContext.Post(_ =>
+            {
+                try { action(); } catch { }
+            }, null);
+        }
+        else if (_invoker != null && _invoker.IsHandleCreated)
+        {
+            _invoker.BeginInvoke(action);
+        }
+    }
+
     public void UpdateStatus(string statusText, bool isConnected, bool isStreaming, bool isPaused)
     {
-        if (_notifyIcon == null || _notifyIcon.ContextMenuStrip == null)
-            return;
-
-        _notifyIcon.ContextMenuStrip.BeginInvoke(() =>
+        PostToUiThread(() =>
         {
             if (_statusItem != null)
             {
@@ -144,30 +164,32 @@ public class TrayIconManager : IDisposable
                 }
             }
 
-            if (!isConnected)
+            if (_notifyIcon != null)
             {
-                _notifyIcon.Icon = _iconDisconnected;
-                _notifyIcon.Text = $"Logitech T650: {statusText}";
-            }
-            else if (isPaused)
-            {
-                _notifyIcon.Icon = _iconPaused;
-                _notifyIcon.Text = $"Logitech T650: Paused ({statusText})";
-            }
-            else
-            {
-                _notifyIcon.Icon = _iconActive;
-                _notifyIcon.Text = $"Logitech T650: Active ({statusText})";
+                if (!isConnected)
+                {
+                    _notifyIcon.Icon = _iconDisconnected;
+                    _notifyIcon.Text = $"Logitech T650: {statusText}";
+                }
+                else if (isPaused)
+                {
+                    _notifyIcon.Icon = _iconPaused;
+                    _notifyIcon.Text = $"Logitech T650: Paused ({statusText})";
+                }
+                else
+                {
+                    _notifyIcon.Icon = _iconActive;
+                    _notifyIcon.Text = $"Logitech T650: Active ({statusText})";
+                }
             }
         });
     }
 
     public void ShowBalloon(string title, string message, ToolTipIcon icon = ToolTipIcon.Info)
     {
-        if (_notifyIcon == null) return;
-        _notifyIcon.ContextMenuStrip?.BeginInvoke(() =>
+        PostToUiThread(() =>
         {
-            _notifyIcon.ShowBalloonTip(3000, title, message, icon);
+            _notifyIcon?.ShowBalloonTip(3000, title, message, icon);
         });
     }
 
