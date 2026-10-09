@@ -17,8 +17,8 @@ class Program
         Console.WriteLine("===============================================================");
         Console.ResetColor();
 
-        bool enableGestures = args.Contains("--gesture") || args.Length == 0;
-        bool verboseDiag = args.Contains("--diag") || args.Contains("--test") || args.Length == 0;
+        bool enableGestures = !args.Contains("--no-gesture");
+        bool verboseDiag = args.Contains("--diag") || args.Contains("--test") || (!args.Contains("--silent") && !args.Contains("--tray"));
 
         Console.WriteLine($"[Config] Gestures Enabled: {enableGestures}");
         Console.WriteLine($"[Config] Diagnostic Display: {verboseDiag}");

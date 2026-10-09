@@ -335,17 +335,14 @@ public class UnifyingReceiver : IDisposable
                         Log($"[Receiver] Hardware link loss detected (0x42) on Device #{report[1]}. Touchpad is standby/off.");
                         SetState(DeviceConnectionState.ReceiverConnectedWaitingForPad);
                     }
-                    // 3. HID++ 2.0/Long root notification (0x11, DeviceIndex, 0x00)
+                    // 3. HID++ 2.0/Long root notification or feature response (0x11, DeviceIndex, 0x00)
                     else if (report[0] == 0x11 && report.Length >= 3 && report[2] == 0x00)
                     {
                         DeviceIndex = report[1];
-                        Log($"[Receiver] Hardware wakeup / device announcement detected on Device #{DeviceIndex}! Re-activating Raw Touch Mode...");
-                        SetState(DeviceConnectionState.TouchpadActive);
-                        ThreadPool.QueueUserWorkItem(_ =>
+                        if (State != DeviceConnectionState.TouchpadActive)
                         {
-                            Thread.Sleep(80);
-                            UnlockRawMode();
-                        });
+                            SetState(DeviceConnectionState.TouchpadActive);
+                        }
                     }
                     // 4. Raw touch reports (0x11, DeviceIndex, RawXyFeatureIndex ...)
                     else if (report[0] == 0x11)
@@ -362,6 +359,10 @@ public class UnifyingReceiver : IDisposable
             catch (TimeoutException)
             {
                 // Normal timeout on idle
+            }
+            catch (IOException ex) when (ex.Message.Contains("Operation failed after some time", StringComparison.OrdinalIgnoreCase) || ex.Message.Contains("timeout", StringComparison.OrdinalIgnoreCase))
+            {
+                // Normal HidSharp timeout on idle
             }
             catch (Exception ex)
             {
