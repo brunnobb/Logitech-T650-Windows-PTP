@@ -4,6 +4,7 @@
 #include "Device.h"
 #include "PtpTypes.h"
 #include "PtpDescriptor.h"
+#include "Trace.h"
 
 // String descriptors for device identification
 static const WCHAR g_ManufacturerString[] = L"Logitech";
@@ -41,17 +42,23 @@ static NTSTATUS RequestCopyFromBuffer(
 
     NTSTATUS status = WdfRequestRetrieveOutputMemory(Request, &memory);
     if (!NT_SUCCESS(status)) {
+        PtpLog(L"[VirtualPtpDriver] RequestCopyFromBuffer: WdfRequestRetrieveOutputMemory failed 0x%08X\n", status);
         return status;
     }
 
     WdfMemoryGetBuffer(memory, &outputBufferLength);
     if (outputBufferLength < NumBytesToCopyFrom) {
+        PtpLog(L"[VirtualPtpDriver] RequestCopyFromBuffer: buffer too small (out=%zu, needed=%zu)\n",
+            outputBufferLength, NumBytesToCopyFrom);
         return STATUS_INVALID_BUFFER_SIZE;
     }
 
     status = WdfMemoryCopyFromBuffer(memory, 0, SourceBuffer, NumBytesToCopyFrom);
     if (NT_SUCCESS(status)) {
         WdfRequestSetInformation(Request, NumBytesToCopyFrom);
+        PtpLog(L"[VirtualPtpDriver] RequestCopyFromBuffer: copied %zu bytes\n", NumBytesToCopyFrom);
+    } else {
+        PtpLog(L"[VirtualPtpDriver] RequestCopyFromBuffer: WdfMemoryCopyFromBuffer failed 0x%08X\n", status);
     }
     return status;
 }
@@ -92,6 +99,39 @@ static NTSTATUS RequestGetHidXferPacket_ToReadFromDevice(
     Packet->reportBufferLen = (ULONG)outputBufferLength;
 
     return STATUS_SUCCESS;
+}
+
+// Helper: extract HID transfer packet for writing to device in UMDF 2
+// Report ID is encoded in output buffer length by MsHidUmdf.sys; input buffer contains report data
+static NTSTATUS RequestGetHidXferPacket_ToWriteToDevice(
+    _In_  WDFREQUEST Request,
+    _Out_ HID_XFER_PACKET* Packet
+)
+{
+    NTSTATUS status;
+    WDFMEMORY inputMemory;
+    WDFMEMORY outputMemory;
+    size_t inputBufferLength = 0;
+    size_t outputBufferLength = 0;
+    PVOID inputBuffer = NULL;
+
+    status = WdfRequestRetrieveOutputMemory(Request, &outputMemory);
+    if (!NT_SUCCESS(status)) {
+        return status;
+    }
+    WdfMemoryGetBuffer(outputMemory, &outputBufferLength);
+    Packet->reportId = (UCHAR)outputBufferLength;
+
+    status = WdfRequestRetrieveInputMemory(Request, &inputMemory);
+    if (!NT_SUCCESS(status)) {
+        return status;
+    }
+    inputBuffer = WdfMemoryGetBuffer(inputMemory, &inputBufferLength);
+
+    Packet->reportBuffer = (PUCHAR)inputBuffer;
+    Packet->reportBufferLen = (ULONG)inputBufferLength;
+
+    return status;
 }
 
 // Helper: extract string ID from IOCTL_HID_GET_STRING
@@ -146,12 +186,22 @@ static NTSTATUS HandleGetFeature(
     }
 
     if (!NT_SUCCESS(status)) {
+        PtpLog(L"[VirtualPtpDriver] HandleGetFeature: RequestGetHidXferPacket failed status=0x%08X\n", status);
         return status;
     }
 
     if (packet.reportBuffer == NULL || packet.reportBufferLen == 0) {
+        PtpLog(L"[VirtualPtpDriver] HandleGetFeature: invalid reportBuffer=NULL or len=0\n");
         return STATUS_INVALID_BUFFER_SIZE;
     }
+
+    // Fallback: if reportId was not in input memory, check first byte of output buffer
+    if (packet.reportId == 0 && packet.reportBufferLen > 0) {
+        packet.reportId = packet.reportBuffer[0];
+    }
+
+    PtpLog(L"[VirtualPtpDriver] HandleGetFeature: reportId=0x%02X, bufLen=%lu\n",
+        packet.reportId, packet.reportBufferLen);
 
     switch (packet.reportId)
     {
@@ -161,12 +211,15 @@ static NTSTATUS HandleGetFeature(
             packet.reportBuffer[0] = 0x02; // Report ID
             packet.reportBuffer[1] = 0x05; // 5 contacts, ClickPad
             WdfRequestSetInformation(Request, 2);
+            PtpLog(L"[VirtualPtpDriver] HandleGetFeature: Caps returning 2 bytes\n");
             return STATUS_SUCCESS;
         } else if (packet.reportBufferLen == 1) {
             packet.reportBuffer[0] = 0x05;
             WdfRequestSetInformation(Request, 1);
+            PtpLog(L"[VirtualPtpDriver] HandleGetFeature: Caps returning 1 byte\n");
             return STATUS_SUCCESS;
         }
+        PtpLog(L"[VirtualPtpDriver] HandleGetFeature: Caps buffer too small (%lu)\n", packet.reportBufferLen);
         return STATUS_INVALID_BUFFER_SIZE;
     }
 
@@ -176,12 +229,15 @@ static NTSTATUS HandleGetFeature(
             packet.reportBuffer[0] = 0x03; // Report ID
             packet.reportBuffer[1] = Context->InputMode;
             WdfRequestSetInformation(Request, 2);
+            PtpLog(L"[VirtualPtpDriver] HandleGetFeature: InputMode returning 2 bytes (0x%02X)\n", Context->InputMode);
             return STATUS_SUCCESS;
         } else if (packet.reportBufferLen == 1) {
             packet.reportBuffer[0] = Context->InputMode;
             WdfRequestSetInformation(Request, 1);
+            PtpLog(L"[VirtualPtpDriver] HandleGetFeature: InputMode returning 1 byte (0x%02X)\n", Context->InputMode);
             return STATUS_SUCCESS;
         }
+        PtpLog(L"[VirtualPtpDriver] HandleGetFeature: InputMode buffer too small (%lu)\n", packet.reportBufferLen);
         return STATUS_INVALID_BUFFER_SIZE;
     }
 
@@ -191,12 +247,15 @@ static NTSTATUS HandleGetFeature(
             packet.reportBuffer[0] = 0x04; // Report ID
             packet.reportBuffer[1] = Context->FunctionSwitch;
             WdfRequestSetInformation(Request, 2);
+            PtpLog(L"[VirtualPtpDriver] HandleGetFeature: FunctionSwitch returning 2 bytes (0x%02X)\n", Context->FunctionSwitch);
             return STATUS_SUCCESS;
         } else if (packet.reportBufferLen == 1) {
             packet.reportBuffer[0] = Context->FunctionSwitch;
             WdfRequestSetInformation(Request, 1);
+            PtpLog(L"[VirtualPtpDriver] HandleGetFeature: FunctionSwitch returning 1 byte (0x%02X)\n", Context->FunctionSwitch);
             return STATUS_SUCCESS;
         }
+        PtpLog(L"[VirtualPtpDriver] HandleGetFeature: FunctionSwitch buffer too small (%lu)\n", packet.reportBufferLen);
         return STATUS_INVALID_BUFFER_SIZE;
     }
 
@@ -206,17 +265,21 @@ static NTSTATUS HandleGetFeature(
             packet.reportBuffer[0] = 0x07; // Report ID
             RtlCopyMemory(&packet.reportBuffer[1], g_PtpCertificationBlob, sizeof(g_PtpCertificationBlob));
             WdfRequestSetInformation(Request, 257);
+            PtpLog(L"[VirtualPtpDriver] HandleGetFeature: PTPHQA returning 257 bytes\n");
             return STATUS_SUCCESS;
         } else if (packet.reportBufferLen == 256) {
             RtlCopyMemory(packet.reportBuffer, g_PtpCertificationBlob, sizeof(g_PtpCertificationBlob));
             WdfRequestSetInformation(Request, 256);
+            PtpLog(L"[VirtualPtpDriver] HandleGetFeature: PTPHQA returning 256 bytes\n");
             return STATUS_SUCCESS;
         }
+        PtpLog(L"[VirtualPtpDriver] HandleGetFeature: PTPHQA buffer too small (%lu)\n", packet.reportBufferLen);
         return STATUS_INVALID_BUFFER_SIZE;
     }
 
     default:
-        return STATUS_NOT_SUPPORTED;
+        PtpLog(L"[VirtualPtpDriver] HandleGetFeature: Unknown reportId 0x%02X -> STATUS_INVALID_PARAMETER\n", packet.reportId);
+        return STATUS_INVALID_PARAMETER;
     }
 }
 
@@ -230,30 +293,55 @@ static NTSTATUS HandleSetFeature(
     _In_ size_t InputBufferLength
 )
 {
-    UNREFERENCED_PARAMETER(IoControlCode);
+    UNREFERENCED_PARAMETER(InputBufferLength);
+    HID_XFER_PACKET packet = { 0 };
+    NTSTATUS status = STATUS_SUCCESS;
 
-    WDFMEMORY inputMemory;
-    NTSTATUS status = WdfRequestRetrieveInputMemory(Request, &inputMemory);
+    if (IoControlCode == IOCTL_UMDF_HID_SET_FEATURE) {
+        status = RequestGetHidXferPacket_ToWriteToDevice(Request, &packet);
+    } else {
+        PHID_XFER_PACKET pKernelPacket = NULL;
+        status = WdfRequestRetrieveInputBuffer(Request, sizeof(HID_XFER_PACKET), (PVOID*)&pKernelPacket, NULL);
+        if (NT_SUCCESS(status) && pKernelPacket != NULL) {
+            packet = *pKernelPacket;
+        }
+    }
+
     if (!NT_SUCCESS(status)) {
+        PtpLog(L"[VirtualPtpDriver] HandleSetFeature: RequestGetHidXferPacket failed status=0x%08X\n", status);
         return status;
     }
 
-    size_t bufferLength = 0;
-    PUCHAR buffer = (PUCHAR)WdfMemoryGetBuffer(inputMemory, &bufferLength);
-    if (buffer == NULL || bufferLength == 0) {
+    if (packet.reportBuffer == NULL || packet.reportBufferLen == 0) {
+        PtpLog(L"[VirtualPtpDriver] HandleSetFeature: invalid reportBuffer=NULL or len=0\n");
         return STATUS_INVALID_BUFFER_SIZE;
     }
 
-    UCHAR reportId = buffer[0];
-    UCHAR value = (bufferLength >= 2) ? buffer[1] : buffer[0];
+    UCHAR reportId = packet.reportId;
+    if (reportId == 0 && packet.reportBufferLen >= 1) {
+        reportId = packet.reportBuffer[0];
+    }
+
+    UCHAR value = packet.reportBuffer[0];
+    if (packet.reportBufferLen >= 2 && packet.reportBuffer[0] == reportId) {
+        value = packet.reportBuffer[1];
+    }
+
+    PtpLog(L"[VirtualPtpDriver] HandleSetFeature: reportId=0x%02X, value=0x%02X, len=%lu\n",
+        reportId, value, packet.reportBufferLen);
 
     if (reportId == 0x03) {
         Context->InputMode = value;
+        PtpLog(L"[VirtualPtpDriver] HandleSetFeature: Set InputMode to 0x%02X\n", value);
     } else if (reportId == 0x04) {
         Context->FunctionSwitch = value;
+        PtpLog(L"[VirtualPtpDriver] HandleSetFeature: Set FunctionSwitch to 0x%02X\n", value);
+    } else {
+        PtpLog(L"[VirtualPtpDriver] HandleSetFeature: Unknown reportId 0x%02X\n", reportId);
+        return STATUS_INVALID_PARAMETER;
     }
 
-    WdfRequestSetInformation(Request, bufferLength);
+    WdfRequestSetInformation(Request, packet.reportBufferLen);
     return STATUS_SUCCESS;
 }
 
@@ -264,18 +352,22 @@ NTSTATUS QueueInitialize(_In_ WDFDEVICE Device)
     NTSTATUS status;
     PDEVICE_CONTEXT context = DeviceGetContext(Device);
 
-    WDF_IO_QUEUE_CONFIG_INIT_DEFAULT_QUEUE(&queueConfig, WdfIoQueueDispatchSequential);
+    PtpLog(L"[VirtualPtpDriver] QueueInitialize: creating default parallel queue...\n");
+    WDF_IO_QUEUE_CONFIG_INIT_DEFAULT_QUEUE(&queueConfig, WdfIoQueueDispatchParallel);
     queueConfig.EvtIoDeviceControl = EvtIoDeviceControl;
 
     status = WdfIoQueueCreate(Device, &queueConfig, WDF_NO_OBJECT_ATTRIBUTES, &queue);
+    PtpLog(L"[VirtualPtpDriver] QueueInitialize: WdfIoQueueCreate (default) status=0x%08X\n", status);
     if (!NT_SUCCESS(status)) {
         return status;
     }
     context->DefaultQueue = queue;
 
     // Create a manual queue for pending HID read reports
+    PtpLog(L"[VirtualPtpDriver] QueueInitialize: creating manual report queue...\n");
     WDF_IO_QUEUE_CONFIG_INIT(&queueConfig, WdfIoQueueDispatchManual);
     status = WdfIoQueueCreate(Device, &queueConfig, WDF_NO_OBJECT_ATTRIBUTES, &context->ManualReportQueue);
+    PtpLog(L"[VirtualPtpDriver] QueueInitialize: WdfIoQueueCreate (manual) status=0x%08X\n", status);
     return status;
 }
 
@@ -290,10 +382,10 @@ VOID EvtIoDeviceControl(
     NTSTATUS status = STATUS_SUCCESS;
     WDFDEVICE device = WdfIoQueueGetDevice(Queue);
     PDEVICE_CONTEXT context = DeviceGetContext(device);
-    size_t bytesReturned = 0;
     BOOLEAN completeRequest = TRUE;
 
-    UNREFERENCED_PARAMETER(OutputBufferLength);
+    PtpLog(L"[VirtualPtpDriver] EvtIoDeviceControl: IOCTL=0x%08X (InLen=%zu, OutLen=%zu)\n",
+        IoControlCode, InputBufferLength, OutputBufferLength);
 
     switch (IoControlCode)
     {
@@ -308,13 +400,17 @@ VOID EvtIoDeviceControl(
         hidDesc.DescriptorList[0].bReportType = HID_REPORT_DESCRIPTOR_TYPE;
         hidDesc.DescriptorList[0].wReportLength = (USHORT)g_PtpReportDescriptorSize;
 
-        status = RequestCopyFromBuffer(Request, &hidDesc, sizeof(HID_DESCRIPTOR));
+        status = RequestCopyFromBuffer(Request, &hidDesc, hidDesc.bLength);
+        PtpLog(L"[VirtualPtpDriver] -> IOCTL_HID_GET_DEVICE_DESCRIPTOR: descSize=%u, reportDescLen=%u, status=0x%08X\n",
+            hidDesc.bLength, hidDesc.DescriptorList[0].wReportLength, status);
         break;
     }
 
     case IOCTL_HID_GET_REPORT_DESCRIPTOR:
     {
         status = RequestCopyFromBuffer(Request, (PVOID)g_PtpReportDescriptor, g_PtpReportDescriptorSize);
+        PtpLog(L"[VirtualPtpDriver] -> IOCTL_HID_GET_REPORT_DESCRIPTOR: reportDescLen=%lu, status=0x%08X\n",
+            g_PtpReportDescriptorSize, status);
         break;
     }
 
@@ -327,6 +423,8 @@ VOID EvtIoDeviceControl(
         attr.VersionNumber = 0x0100;
 
         status = RequestCopyFromBuffer(Request, &attr, sizeof(HID_DEVICE_ATTRIBUTES));
+        PtpLog(L"[VirtualPtpDriver] -> IOCTL_HID_GET_DEVICE_ATTRIBUTES: VID=0x%04X, PID=0x%04X, status=0x%08X\n",
+            attr.VendorID, attr.ProductID, status);
         break;
     }
 
@@ -335,17 +433,20 @@ VOID EvtIoDeviceControl(
         // Forward read request to manual report queue
         // It stays pending until an input report is injected from the bridge
         status = WdfRequestForwardToIoQueue(Request, context->ManualReportQueue);
-        if (NT_SUCCESS(status)) {
-            // Forwarded successfully - do not complete now!
-            return;
+        if (!NT_SUCCESS(status)) {
+            PtpLog(L"[VirtualPtpDriver] -> IOCTL_HID_READ_REPORT: WdfRequestForwardToIoQueue failed 0x%08X\n", status);
+            WdfRequestComplete(Request, status);
+        } else {
+            PtpLog(L"[VirtualPtpDriver] -> IOCTL_HID_READ_REPORT: forwarded to manual queue (pending)\n");
         }
-        break;
+        return;
     }
 
     case IOCTL_UMDF_HID_GET_FEATURE:
     case IOCTL_HID_GET_FEATURE:
     {
         status = HandleGetFeature(context, Request, IoControlCode);
+        PtpLog(L"[VirtualPtpDriver] -> GET_FEATURE: status=0x%08X\n", status);
         break;
     }
 
@@ -353,6 +454,7 @@ VOID EvtIoDeviceControl(
     case IOCTL_HID_SET_FEATURE:
     {
         status = HandleSetFeature(context, Request, IoControlCode, InputBufferLength);
+        PtpLog(L"[VirtualPtpDriver] -> SET_FEATURE: status=0x%08X\n", status);
         break;
     }
 
@@ -385,6 +487,7 @@ VOID EvtIoDeviceControl(
                 status = STATUS_SUCCESS;
             }
         }
+        PtpLog(L"[VirtualPtpDriver] -> GET_INPUT_REPORT: reportId=0x%02X, status=0x%08X\n", packet.reportId, status);
         break;
     }
 
@@ -393,6 +496,7 @@ VOID EvtIoDeviceControl(
     {
         WdfRequestSetInformation(Request, InputBufferLength);
         status = STATUS_SUCCESS;
+        PtpLog(L"[VirtualPtpDriver] -> SET_OUTPUT_REPORT: InLen=%zu, status=0x%08X\n", InputBufferLength, status);
         break;
     }
 
@@ -400,10 +504,12 @@ VOID EvtIoDeviceControl(
     case IOCTL_HID_DEACTIVATE_DEVICE:
     {
         status = STATUS_SUCCESS;
+        PtpLog(L"[VirtualPtpDriver] -> ACTIVATE/DEACTIVATE: status=0x%08X\n", status);
         break;
     }
 
     case IOCTL_HID_GET_STRING:
+    case IOCTL_HID_GET_INDEXED_STRING:
     {
         ULONG stringId = 0;
         ULONG languageId = 0;
@@ -424,44 +530,45 @@ VOID EvtIoDeviceControl(
                 break;
             }
         }
+        PtpLog(L"[VirtualPtpDriver] -> GET_STRING: stringId=%lu, status=0x%08X\n", stringId, status);
         break;
     }
 
     case IOCTL_PTP_INJECT_REPORT:
     {
         // Injection from user-mode bridge daemon
-        if (InputBufferLength < sizeof(PTP_TOUCH_REPORT)) {
+        if (InputBufferLength < sizeof(UCHAR)) {
             status = STATUS_BUFFER_TOO_SMALL;
             break;
         }
 
-        PPTP_TOUCH_REPORT report = NULL;
-        status = WdfRequestRetrieveInputBuffer(Request, sizeof(PTP_TOUCH_REPORT), (PVOID*)&report, NULL);
-        if (NT_SUCCESS(status) && report != NULL) {
+        PVOID reportBuffer = NULL;
+        status = WdfRequestRetrieveInputBuffer(Request, InputBufferLength, &reportBuffer, NULL);
+        if (NT_SUCCESS(status) && reportBuffer != NULL) {
             // Check if there is a pending read request from the HID class driver
             WDFREQUEST pendingReadRequest = NULL;
             NTSTATUS queueStatus = WdfIoQueueRetrieveNextRequest(context->ManualReportQueue, &pendingReadRequest);
             if (NT_SUCCESS(queueStatus) && pendingReadRequest != NULL) {
-                NTSTATUS copyStatus = RequestCopyFromBuffer(pendingReadRequest, report, sizeof(PTP_TOUCH_REPORT));
+                NTSTATUS copyStatus = RequestCopyFromBuffer(pendingReadRequest, reportBuffer, InputBufferLength);
                 WdfRequestComplete(pendingReadRequest, copyStatus);
             }
             // Complete the inject request successfully
+            WdfRequestSetInformation(Request, InputBufferLength);
             status = STATUS_SUCCESS;
-            bytesReturned = sizeof(PTP_TOUCH_REPORT);
         }
         break;
     }
 
     default:
-        status = STATUS_NOT_SUPPORTED;
+        status = STATUS_NOT_IMPLEMENTED;
+        PtpLog(L"[VirtualPtpDriver] -> UNHANDLED IOCTL: 0x%08X (returning STATUS_NOT_IMPLEMENTED 0x%08X)\n",
+            IoControlCode, status);
         break;
     }
 
     if (completeRequest) {
-        if (bytesReturned > 0) {
-            WdfRequestCompleteWithInformation(Request, status, bytesReturned);
-        } else {
-            WdfRequestComplete(Request, status);
-        }
+        PtpLog(L"[VirtualPtpDriver] <- Completing IOCTL 0x%08X: status=0x%08X, info=%zu\n",
+            IoControlCode, status, WdfRequestGetInformation(Request));
+        WdfRequestComplete(Request, status);
     }
 }

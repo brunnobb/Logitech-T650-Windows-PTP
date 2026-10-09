@@ -64,6 +64,8 @@ if (-not (Test-Path $devcon)) {
 }
 
 if (Test-Path $devcon) {
+    & $devcon remove "Root\T650VirtualPtp" | Out-Null
+    & $devcon remove "@ROOT\HIDCLASS\*" | Out-Null
     & $devcon install $infFile "Root\T650VirtualPtp"
     Write-Host "  -> Devcon device installation complete!" -ForegroundColor Green
 } else {

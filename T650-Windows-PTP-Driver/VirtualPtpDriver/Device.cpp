@@ -2,6 +2,7 @@
 #include <initguid.h>
 #include "Device.h"
 #include "Queue.h"
+#include "Trace.h"
 
 NTSTATUS DeviceCreate(_Inout_ PWDFDEVICE_INIT DeviceInit)
 {
@@ -10,12 +11,14 @@ NTSTATUS DeviceCreate(_Inout_ PWDFDEVICE_INIT DeviceInit)
     NTSTATUS status;
     PDEVICE_CONTEXT context;
 
+    PtpLog(L"[VirtualPtpDriver] DeviceCreate: Setting filter...\n");
     WDF_OBJECT_ATTRIBUTES_INIT_CONTEXT_TYPE(&deviceAttributes, DEVICE_CONTEXT);
 
     // Filter driver under MsHidUmdf.sys
     WdfFdoInitSetFilter(DeviceInit);
 
     status = WdfDeviceCreate(&DeviceInit, &deviceAttributes, &device);
+    PtpLog(L"[VirtualPtpDriver] DeviceCreate: WdfDeviceCreate status=0x%08X\n", status);
     if (!NT_SUCCESS(status)) {
         return status;
     }
@@ -31,10 +34,12 @@ NTSTATUS DeviceCreate(_Inout_ PWDFDEVICE_INIT DeviceInit)
         &GUID_DEVINTERFACE_T650_VIRTUAL_PTP,
         NULL
     );
+    PtpLog(L"[VirtualPtpDriver] DeviceCreate: WdfDeviceCreateDeviceInterface status=0x%08X\n", status);
     if (!NT_SUCCESS(status)) {
         return status;
     }
 
     status = QueueInitialize(device);
+    PtpLog(L"[VirtualPtpDriver] DeviceCreate: QueueInitialize status=0x%08X\n", status);
     return status;
 }

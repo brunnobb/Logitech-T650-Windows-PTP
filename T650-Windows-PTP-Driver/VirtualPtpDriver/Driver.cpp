@@ -1,5 +1,6 @@
 #include "Driver.h"
 #include "Device.h"
+#include "Trace.h"
 
 NTSTATUS DriverEntry(
     _In_ PDRIVER_OBJECT  DriverObject,
@@ -8,6 +9,9 @@ NTSTATUS DriverEntry(
 {
     WDF_DRIVER_CONFIG config;
     NTSTATUS status;
+
+    PtpLog(L"[VirtualPtpDriver] DriverEntry called. RegistryPath=%s\n",
+        (RegistryPath && RegistryPath->Buffer) ? RegistryPath->Buffer : L"(null)");
 
     WDF_DRIVER_CONFIG_INIT(&config, EvtDeviceAdd);
 
@@ -19,6 +23,7 @@ NTSTATUS DriverEntry(
         WDF_NO_HANDLE
     );
 
+    PtpLog(L"[VirtualPtpDriver] WdfDriverCreate returned status=0x%08X\n", status);
     return status;
 }
 
@@ -28,5 +33,8 @@ NTSTATUS EvtDeviceAdd(
 )
 {
     UNREFERENCED_PARAMETER(Driver);
-    return DeviceCreate(DeviceInit);
+    PtpLog(L"[VirtualPtpDriver] EvtDeviceAdd called\n");
+    NTSTATUS status = DeviceCreate(DeviceInit);
+    PtpLog(L"[VirtualPtpDriver] DeviceCreate completed with status=0x%08X\n", status);
+    return status;
 }

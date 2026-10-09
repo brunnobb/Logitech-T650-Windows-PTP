@@ -24,6 +24,7 @@ if (-not (Test-Path $devcon)) {
 if (Test-Path $devcon) {
     Write-Host "`n[1/3] Removing Virtual PTP device node..." -ForegroundColor Yellow
     & $devcon remove "Root\T650VirtualPtp"
+    & $devcon remove "@ROOT\HIDCLASS\*"
 }
 
 # 2. Delete driver from DriverStore

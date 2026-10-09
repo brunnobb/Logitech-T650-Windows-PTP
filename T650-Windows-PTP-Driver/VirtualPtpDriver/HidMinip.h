@@ -26,6 +26,7 @@
 #define IOCTL_HID_READ_REPORT                       HID_CTL_CODE(2)
 #define IOCTL_HID_WRITE_REPORT                      HID_CTL_CODE(3)
 #define IOCTL_HID_GET_STRING                        HID_CTL_CODE(4)
+#define IOCTL_HID_GET_INDEXED_STRING                HID_OUT_CTL_CODE(120)
 #define IOCTL_HID_ACTIVATE_DEVICE                   HID_CTL_CODE(7)
 #define IOCTL_HID_DEACTIVATE_DEVICE                 HID_CTL_CODE(8)
 #define IOCTL_HID_GET_DEVICE_ATTRIBUTES             HID_CTL_CODE(9)
