@@ -38,14 +38,19 @@ if (Test-Path $csprojPath) {
     Write-Host "  -> Updated to Version $NewVersion ($fourPartVersion)" -ForegroundColor Green
 }
 
-# 3. Update Installer\T650Bridge\T650Bridge.wxs
-$bridgeWxsPath = Join-Path $repoRoot "Installer\T650Bridge\T650Bridge.wxs"
-if (Test-Path $bridgeWxsPath) {
-    Write-Host "`n[2/4] Updating $bridgeWxsPath..." -ForegroundColor Yellow
-    $wxsContent = Get-Content $bridgeWxsPath -Raw
-    $wxsContent = [regex]::Replace($wxsContent, '(?<!Installer)Version="[\d\.]+"', "Version=""$fourPartVersion""")
-    Set-Content -Path $bridgeWxsPath -Value $wxsContent -Encoding utf8
-    Write-Host "  -> Updated to Version $fourPartVersion" -ForegroundColor Green
+# 3. Update Installer\T650Bridge\*.wxs
+$bridgeWxsFiles = @(
+    Join-Path $repoRoot "Installer\T650Bridge\T650Bridge.wxs",
+    Join-Path $repoRoot "Installer\T650Bridge\T650Bridge-Admin.wxs"
+)
+foreach ($bridgeWxsPath in $bridgeWxsFiles) {
+    if (Test-Path $bridgeWxsPath) {
+        Write-Host "`n[2/4] Updating $bridgeWxsPath..." -ForegroundColor Yellow
+        $wxsContent = Get-Content $bridgeWxsPath -Raw
+        $wxsContent = [regex]::Replace($wxsContent, '(?<!Installer)Version="[\d\.]+"', "Version=""$fourPartVersion""")
+        Set-Content -Path $bridgeWxsPath -Value $wxsContent -Encoding utf8
+        Write-Host "  -> Updated to Version $fourPartVersion" -ForegroundColor Green
+    }
 }
 
 # 4. Update Installer\VirtualPtpDriver\VirtualPtpDriver.wxs

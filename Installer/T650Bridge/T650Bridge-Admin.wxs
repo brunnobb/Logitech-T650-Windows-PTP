@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <?ifndef LicenseRtf ?>
+  <?define LicenseRtf = "..\License.rtf" ?>
+  <?endif ?>
+  <Product Id="*"
+           Name="Logitech T650 Bridge (Standalone Admin Edition)"
+           Language="1033"
+           Version="1.1.2.0"
+           Manufacturer="Logitech T650 Community Project"
+           UpgradeCode="8E3B6899-28BC-4537-88EB-8B9075ACD421">
+
+    <Package InstallerVersion="405"
+             Compressed="yes"
+             InstallScope="perMachine"
+             Platform="x64"
+             Description="Logitech T650 Standalone Software Gesture Engine with UIPI Administrator Bypass"
+             Comments="Bridges Logitech T650 multi-touch hardware reports into gestures with full elevation across all admin apps" />
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+
+    <MediaTemplate EmbedCab="yes" />
+
+    <!-- Application Icon -->
+    <Icon Id="AppIcon.ico" SourceFile="$(var.SourceDir)\T650.ico" />
+    <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />
+    <Property Id="ARPHELPLINK" Value="https://github.com/brunnobb/Logitech-T650-Windows-PTP" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/brunnobb/Logitech-T650-Windows-PTP" />
+
+    <!-- Directory Layout -->
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFiles64Folder">
+        <Directory Id="CompanyFolder" Name="Logitech T650 PTP">
+          <Directory Id="INSTALLFOLDER" Name="Bridge-Admin" />
+        </Directory>
+      </Directory>
+
+      <Directory Id="ProgramMenuFolder">
+        <Directory Id="ApplicationProgramsFolder" Name="Logitech T650 PTP" />
+      </Directory>
+
+      <Directory Id="DesktopFolder" Name="Desktop" />
+    </Directory>
+
+    <!-- Component 1: Application Files -->
+    <DirectoryRef Id="INSTALLFOLDER">
+      <Component Id="BridgeMainComponent" Guid="D206386C-2747-49F1-92D1-A52857DC991E" Win64="yes">
+        <File Id="T650BridgeExe" Source="$(var.SourceDir)\T650Bridge.exe" KeyPath="yes" />
+        <File Id="T650BridgeDll" Source="$(var.SourceDir)\T650Bridge.dll" />
+        <File Id="HidSharpDll" Source="$(var.SourceDir)\HidSharp.dll" />
+        <File Id="T650BridgeDepsJson" Source="$(var.SourceDir)\T650Bridge.deps.json" />
+        <File Id="T650BridgeRuntimeJson" Source="$(var.SourceDir)\T650Bridge.runtimeconfig.json" />
+        <File Id="T650Ico" Source="$(var.SourceDir)\T650.ico" />
+      </Component>
+    </DirectoryRef>
+
+    <!-- Component 2: Shortcuts -->
+    <DirectoryRef Id="ApplicationProgramsFolder">
+      <Component Id="ApplicationShortcutsComponent" Guid="F979040C-E682-4E90-B79C-5D4807FE4985" Win64="yes">
+        <!-- Start Menu Shortcut -->
+        <Shortcut Id="StartMenuBridgeShortcut"
+                  Name="Logitech T650 Bridge (Admin Edition)"
+                  Description="Start Logitech T650 Bridge with full administrator privileges"
+                  Target="[INSTALLFOLDER]T650Bridge.exe"
+                  WorkingDirectory="INSTALLFOLDER"
+                  Icon="AppIcon.ico" />
+
+        <!-- Start Menu Shortcut (with Diagnostic Console) -->
+        <Shortcut Id="StartMenuBridgeConsoleShortcut"
+                  Name="Logitech T650 Bridge (Admin Diag Console)"
+                  Description="Start Logitech T650 Bridge Admin with verbose diagnostics console"
+                  Target="[INSTALLFOLDER]T650Bridge.exe"
+                  Arguments="--console"
+                  WorkingDirectory="INSTALLFOLDER"
+                  Icon="AppIcon.ico" />
+
+        <!-- Desktop Shortcut -->
+        <Shortcut Id="DesktopBridgeShortcut"
+                  Directory="DesktopFolder"
+                  Name="Logitech T650 Bridge (Admin Edition)"
+                  Description="Start Logitech T650 Bridge with full administrator privileges"
+                  Target="[INSTALLFOLDER]T650Bridge.exe"
+                  WorkingDirectory="INSTALLFOLDER"
+                  Icon="AppIcon.ico" />
+
+        <RemoveFolder Id="RemoveApplicationProgramsFolder" On="uninstall" />
+        <RegistryValue Root="HKCU"
+                       Key="Software\LogitechT650Ptp\BridgeAdmin"
+                       Name="Installed"
+                       Type="integer"
+                       Value="1"
+                       KeyPath="yes" />
+      </Component>
+    </DirectoryRef>
+
+    <!-- Features -->
+    <Feature Id="MainFeature" Title="Logitech T650 Bridge (Admin Edition)" Level="1">
+      <ComponentRef Id="BridgeMainComponent" />
+      <ComponentRef Id="ApplicationShortcutsComponent" />
+    </Feature>
+
+    <!-- Auto-Start via Windows Task Scheduler (Runs with Highest Privileges silently at logon) -->
+    <CustomAction Id="CreateAdminTaskAction"
+                  Directory="INSTALLFOLDER"
+                  ExeCommand="&quot;[SystemFolder]cmd.exe&quot; /c schtasks.exe /create /tn &quot;Logitech T650 Bridge Admin&quot; /tr &quot;\&quot;[INSTALLFOLDER]T650Bridge.exe\&quot; --silent&quot; /sc onlogon /rl highest /f"
+                  Execute="deferred"
+                  Impersonate="no"
+                  Return="ignore" />
+
+    <CustomAction Id="DeleteAdminTaskAction"
+                  Directory="INSTALLFOLDER"
+                  ExeCommand="&quot;[SystemFolder]cmd.exe&quot; /c schtasks.exe /delete /tn &quot;Logitech T650 Bridge Admin&quot; /f"
+                  Execute="deferred"
+                  Impersonate="no"
+                  Return="ignore" />
+
+    <InstallExecuteSequence>
+      <Custom Action="CreateAdminTaskAction" Before="InstallFinalize">NOT Installed OR REINSTALL</Custom>
+      <Custom Action="DeleteAdminTaskAction" Before="RemoveFiles">(NOT UPGRADINGPRODUCTCODE) AND (REMOVE="ALL")</Custom>
+    </InstallExecuteSequence>
+
+    <!-- UI Configuration -->
+    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
+    <WixVariable Id="WixUILicenseRtf" Value="$(var.LicenseRtf)" />
+    <UIRef Id="WixUI_InstallDir" />
+
+    <!-- Optional Launch on Exit -->
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="Launch Logitech T650 Bridge in System Tray now" />
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1" />
+
+    <CustomAction Id="LaunchBridgeNow"
+                  FileKey="T650BridgeExe"
+                  ExeCommand="--silent"
+                  Execute="immediate"
+                  Impersonate="yes"
+                  Return="asyncNoWait" />
+
+    <UI>
+      <Publish Dialog="ExitDialog"
+               Control="Finish"
+               Event="DoAction"
+               Value="LaunchBridgeNow">WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 and NOT Installed</Publish>
+    </UI>
+
+  </Product>
+</Wix>

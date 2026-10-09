@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Runtime.InteropServices;
@@ -44,12 +45,18 @@ public class TrayIconManager : IDisposable
     public bool IsConsoleHidden { get; private set; } = false;
     public bool EnableNotifications { get; set; } = false;
 
+    private readonly bool _isAdminMode;
+    private readonly bool _isElevated;
+
     public event Action? ToggleStartStop;
     public event Action? RequestRewake;
     public event Action? RequestExit;
 
-    public TrayIconManager()
+    public TrayIconManager(bool isAdminMode = false, bool isElevated = false)
     {
+        _isAdminMode = isAdminMode;
+        _isElevated = isElevated;
+
         _uiThread = new Thread(RunMessageLoop)
         {
             IsBackground = true,
@@ -83,14 +90,44 @@ public class TrayIconManager : IDisposable
 
         _contextMenu = new ContextMenuStrip();
         
-        // Header: Version Display
-        var version = typeof(TrayIconManager).Assembly.GetName().Version?.ToString(3) ?? "1.1.1";
-        var titleItem = new ToolStripMenuItem($"Logitech T650 Bridge v{version}")
+        // Header: Version & Edition Display
+        var version = typeof(TrayIconManager).Assembly.GetName().Version?.ToString(3) ?? "1.1.2";
+        string tag = _isAdminMode ? "[Admin]" : "[PTP]";
+        var titleItem = new ToolStripMenuItem($"Logitech T650 Bridge v{version} {tag}")
         {
             Enabled = false,
             Font = new Font(Control.DefaultFont, FontStyle.Italic)
         };
         _contextMenu.Items.Add(titleItem);
+
+        if (_isElevated)
+        {
+            var adminStatusItem = new ToolStripMenuItem("🛡️ Elevation: Administrator (UIPI Active)")
+            {
+                Enabled = false
+            };
+            _contextMenu.Items.Add(adminStatusItem);
+        }
+        else
+        {
+            var restartAdminItem = new ToolStripMenuItem("🛡️ Restart as Administrator", null, (s, e) =>
+            {
+                try
+                {
+                    var psi = new ProcessStartInfo
+                    {
+                        FileName = Environment.ProcessPath ?? "T650Bridge.exe",
+                        UseShellExecute = true,
+                        Verb = "runas",
+                        Arguments = string.Join(" ", Environment.GetCommandLineArgs().Skip(1))
+                    };
+                    Process.Start(psi);
+                    Environment.Exit(0);
+                }
+                catch { }
+            });
+            _contextMenu.Items.Add(restartAdminItem);
+        }
 
         // 1. Status Display
         _statusItem = new ToolStripMenuItem("Status: Initializing...")

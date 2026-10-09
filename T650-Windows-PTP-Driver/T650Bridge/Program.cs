@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Reflection;
+using System.Security.Principal;
 using T650Bridge.Gesture;
 using T650Bridge.Hidpp;
 using T650Bridge.Ptp;
@@ -12,22 +13,69 @@ class Program
 {
     static void Main(string[] args)
     {
-        var version = Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.1.1";
+        var version = Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.1.2";
+
+#if FLAVOR_ADMIN
+        const bool compiledAsAdmin = true;
+#else
+        const bool compiledAsAdmin = false;
+#endif
+
+        bool adminMode = compiledAsAdmin || args.Contains("--admin") || args.Contains("--standalone");
+        bool isElevated = IsElevated();
+
+        if (adminMode && !isElevated)
+        {
+            try
+            {
+                var psi = new ProcessStartInfo
+                {
+                    FileName = Environment.ProcessPath ?? "T650Bridge.exe",
+                    UseShellExecute = true,
+                    Verb = "runas",
+                    Arguments = string.Join(" ", args)
+                };
+                Process.Start(psi);
+                return;
+            }
+            catch (Exception ex)
+            {
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.WriteLine($"[Security] Elevation prompt declined ({ex.Message}). Continuing as standard user.");
+                Console.WriteLine("[Security] Note: Mouse movement will freeze over Admin windows due to Windows UIPI.");
+                Console.ResetColor();
+            }
+        }
+
+        string edition = adminMode ? "Standalone Admin Edition" : "Precision Touchpad (PTP) Edition";
 
         Console.ForegroundColor = ConsoleColor.Cyan;
         Console.WriteLine("===============================================================");
-        Console.WriteLine($" Logitech T650 Windows Precision Touchpad (PTP) Bridge v{version} ");
+        Console.WriteLine($" Logitech T650 Bridge v{version} - {edition} ");
         Console.WriteLine("===============================================================");
         Console.ResetColor();
 
-        Console.WriteLine($"[Version] Bridge Daemon v{version}");
+        Console.WriteLine($"[Version] Bridge Daemon v{version} ({edition})");
+        Console.WriteLine($"[Security] Elevation: {(isElevated ? "Administrator (UIPI Bypass Active)" : "Standard User (Medium Integrity)")}");
+        if (!isElevated)
+        {
+            Console.WriteLine("[Security] Notice: Run as Administrator or install Virtual PTP Driver to control Admin windows.");
+        }
         bool enableGestures = !args.Contains("--no-gesture");
         bool enableNotifications = args.Contains("--notifications") || args.Contains("--balloon");
         bool verboseDiag = args.Contains("--diag") || args.Contains("--test") || (!args.Contains("--silent") && !args.Contains("--tray"));
 
         Console.WriteLine($"[Config] Gestures Enabled: {enableGestures}");
         Console.WriteLine($"[Config] Desktop Notifications: {(enableNotifications ? "Enabled" : "Disabled (Quiet)")}");
-        Console.WriteLine($"[Config] Diagnostic Display: {verboseDiag}");
+        const string MutexName = @"Global\LogitechT650Bridge_SingleInstanceMutex";
+        using var singleMutex = new Mutex(true, MutexName, out bool isOnlyInstance);
+        if (!isOnlyInstance)
+        {
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            Console.WriteLine("\n[Notice] Another instance of Logitech T650 Bridge is already running. Exiting.");
+            Console.ResetColor();
+            return;
+        }
 
         AttachToInteractiveDesktop();
 
@@ -103,7 +151,7 @@ class Program
         bool silentStartup = args.Contains("--silent") || args.Contains("--tray") || args.Contains("--minimized");
         bool autoHide = !args.Contains("--console") && !args.Contains("--no-hide");
 
-        using var tray = new TrayIconManager();
+        using var tray = new TrayIconManager(adminMode, isElevated);
         tray.EnableNotifications = enableNotifications;
         tray.UpdateState(DeviceConnectionState.SearchingForReceiver, isPaused: !enableGestures);
 
@@ -289,4 +337,18 @@ class Program
 
     [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
     private struct POINT { public int X; public int Y; }
+
+    private static bool IsElevated()
+    {
+        try
+        {
+            using var identity = WindowsIdentity.GetCurrent();
+            var principal = new WindowsPrincipal(identity);
+            return principal.IsInRole(WindowsBuiltInRole.Administrator);
+        }
+        catch
+        {
+            return false;
+        }
+    }
 }

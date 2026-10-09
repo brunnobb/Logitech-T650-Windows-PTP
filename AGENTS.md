@@ -70,12 +70,13 @@ When an AI prompt requests a new release, version bump, or installer update (e.g
 
 ### 2. Canonical Version File Locations
 
-When changing versions, the following **4 files** must stay synchronized:
+When changing versions, the following **5 files** must stay synchronized:
 
 | File | Target Element / Property | Example Value |
 | :--- | :--- | :--- |
 | [`T650Bridge.csproj`](file:///c:/Workspace/T650-Windows-PTP/T650-Windows-PTP-Driver/T650Bridge/T650Bridge.csproj) | `<Version>`, `<AssemblyVersion>`, `<FileVersion>` | `<Version>1.1.0</Version>`<br>`<AssemblyVersion>1.1.0.0</AssemblyVersion>` |
 | [`T650Bridge.wxs`](file:///c:/Workspace/T650-Windows-PTP/Installer/T650Bridge/T650Bridge.wxs) | `<Product Version="..." ...>` | `Version="1.1.0.0"` |
+| [`T650Bridge-Admin.wxs`](file:///c:/Workspace/T650-Windows-PTP/Installer/T650Bridge/T650Bridge-Admin.wxs) | `<Product Version="..." ...>` | `Version="1.1.0.0"` |
 | [`VirtualPtpDriver.wxs`](file:///c:/Workspace/T650-Windows-PTP/Installer/VirtualPtpDriver/VirtualPtpDriver.wxs) | `<Product Version="..." ...>` | `Version="1.1.0.0"` |
 | [`VirtualPtpDriver.inx`](file:///c:/Workspace/T650-Windows-PTP/T650-Windows-PTP-Driver/VirtualPtpDriver/VirtualPtpDriver.inx) | `DriverVer = MM/DD/YYYY,MAJOR.MINOR.PATCH.BUILD` | `DriverVer = 10/09/2026,1.1.0.0` |
 
@@ -83,7 +84,8 @@ When changing versions, the following **4 files** must stay synchronized:
 
 1. **Keep `Product Id="*"` dynamic:** Never hardcode a GUID in `Product Id`. Setting `Id="*"` ensures WiX generates a new `ProductCode` GUID for each release, enabling smooth automatic upgrades.
 2. **Never change `UpgradeCode`:**
-   - Bridge Daemon UpgradeCode: `355A1666-3125-4EC3-82E0-7F4B02825E0B`
+   - Bridge PTP Edition UpgradeCode: `355A1666-3125-4EC3-82E0-7F4B02825E0B`
+   - Bridge Admin Edition UpgradeCode: `8E3B6899-28BC-4537-88EB-8B9075ACD421`
    - Virtual Driver UpgradeCode: `71E9D2E0-72E7-4AD2-8498-27041365E996`
    - Changing `UpgradeCode` causes Windows Installer to treat it as a different application rather than an upgrade.
 3. **MajorUpgrade Configuration:** `<MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />` handles replacing earlier releases automatically.
@@ -102,32 +104,37 @@ pwsh -File "Installer/Bump-Version.ps1" -NewVersion "1.1.0"
 If executing commands step-by-step:
 
 ```powershell
-# 1. Build and test Bridge .NET project
-dotnet build "T650-Windows-PTP-Driver\T650Bridge" -c Release
+# 1. Build and test Bridge .NET project (both flavors)
+dotnet build "T650-Windows-PTP-Driver\T650Bridge" -c Release -p:Flavor=Ptp
+dotnet build "T650-Windows-PTP-Driver\T650Bridge" -c Release -p:Flavor=Admin
 
-# 2. Build both MSI installers (with versioned names and SHA-256 hashes)
-pwsh -File "Installer\Build-All-Installers.ps1" -Version "1.1.0"
+# 2. Build all MSI installers (with versioned names and SHA-256 hashes)
+pwsh -File "Installer\Build-All-Installers.ps1" -Version "1.1.2"
 
 # 3. Output artifacts are placed in Dist\:
-#    Dist\T650Bridge-Setup-v1.1.0.msi
-#    Dist\T650Bridge-Setup-v1.1.0.msi.sha256
-#    Dist\VirtualPtpDriver-Setup-v1.1.0.msi
-#    Dist\VirtualPtpDriver-Setup-v1.1.0.msi.sha256
+#    Dist\T650Bridge-PTP-Setup-v1.1.2.msi    (PTP Driver client edition)
+#    Dist\T650Bridge-Admin-Setup-v1.1.2.msi  (Standalone Admin / UIPI bypass edition)
+#    Dist\VirtualPtpDriver-Setup-v1.1.2.msi  (Virtual PTP Driver package)
 #    Dist\SHA256SUMS.txt
-#    (Convenience unversioned copies T650Bridge-Setup.msi and VirtualPtpDriver-Setup.msi are also maintained)
+#    (Convenience unversioned copies T650Bridge-PTP-Setup.msi, T650Bridge-Admin-Setup.msi, and VirtualPtpDriver-Setup.msi are also maintained)
 
 # 4. Git commit and tag release
 git add -u
-git commit -m "chore(release): bump version to 1.1.0"
-git tag -a v1.1.0 -m "Release v1.1.0"
+git commit -m "chore(release): bump version to 1.1.2"
+git tag -a v1.1.2 -m "Release v1.1.2"
 git push origin main --tags
 ```
 
 ### 6. Auto-Start & Task Manager Verification
 
-The Bridge installer registers auto-start under:
-* **Registry Key:** `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`
-* **Entry Name:** `Logitech T650 Bridge`
-* **Command:** `"C:\Program Files\Logitech T650 PTP\Bridge\T650Bridge.exe" --silent`
-* **Behavior:** Visible in Windows Task Manager $\rightarrow$ **Startup apps** tab as **"Logitech T650 Bridge"**. Users can disable/enable it without Administrator rights.
+* **PTP Edition:**
+  - **Registry Key:** `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`
+  - **Entry Name:** `Logitech T650 Bridge`
+  - **Command:** `"C:\Program Files\Logitech T650 PTP\Bridge\T650Bridge.exe" --silent`
+  - **Behavior:** Visible in Windows Task Manager $\rightarrow$ **Startup apps** tab as **"Logitech T650 Bridge"**.
+
+* **Admin Edition:**
+  - **Task Scheduler:** `Logitech T650 Bridge Admin`
+  - **Command:** `"C:\Program Files\Logitech T650 PTP\Bridge-Admin\T650Bridge.exe" --silent`
+  - **Trigger:** At logon, runs with Highest Privileges (`/rl highest`) **silently without any UAC prompt**, allowing uninterrupted mouse movement across elevated Administrator windows.
 

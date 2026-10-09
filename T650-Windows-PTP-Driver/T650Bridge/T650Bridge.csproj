@@ -12,6 +12,19 @@
     <Version>1.1.2</Version>
     <AssemblyVersion>1.1.2.0</AssemblyVersion>
     <FileVersion>1.1.2.0</FileVersion>
+    <Flavor Condition="'$(Flavor)' == ''">Ptp</Flavor>
+  </PropertyGroup>
+
+  <!-- PTP Driver Mode: Runs as Invoker -->
+  <PropertyGroup Condition="'$(Flavor)' == 'Ptp'">
+    <DefineConstants>$(DefineConstants);FLAVOR_PTP</DefineConstants>
+    <ApplicationManifest>app.ptp.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+  <!-- Admin / Solution 1 Mode: Runs elevated with requireAdministrator to bypass UIPI -->
+  <PropertyGroup Condition="'$(Flavor)' == 'Admin'">
+    <DefineConstants>$(DefineConstants);FLAVOR_ADMIN</DefineConstants>
+    <ApplicationManifest>app.admin.manifest</ApplicationManifest>
   </PropertyGroup>
 
   <ItemGroup>
