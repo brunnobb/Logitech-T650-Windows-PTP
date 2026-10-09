@@ -126,26 +126,29 @@ public class UnifyingReceiver : IDisposable
 
     private void HeartbeatLoop()
     {
-        // Gentle heartbeat every 2.5 seconds to keep the 2.4 GHz radio from sleeping
-        byte[] ping = new byte[20];
-        ping[0] = 0x11;
-        ping[1] = DeviceIndex;
-        ping[2] = 0x00;
-        ping[3] = Swid;
+        // Periodic keep-alive packet every 2.0 seconds.
+        // By continuously re-asserting setRawReportState(0x05), if the device is power-cycled
+        // (turned off and on), it is automatically restored to raw multi-touch mode within ~2 seconds.
+        byte[] keepAlive = new byte[20];
+        keepAlive[0] = 0x11;
+        keepAlive[1] = DeviceIndex;
+        keepAlive[2] = RawXyFeatureIndex;
+        keepAlive[3] = (byte)((2 << 4) | Swid); // func 2 (setRawReportState) | SWID
+        keepAlive[4] = 0x05; // 0x01 (enable raw) | 0x04 (enhanced sensitivity)
 
         while (_cts != null && !_cts.IsCancellationRequested)
         {
             try
             {
-                Thread.Sleep(2500);
+                Thread.Sleep(2000);
                 if (_stream != null && IsConnected)
                 {
-                    _stream.Write(ping);
+                    _stream.Write(keepAlive);
                 }
             }
             catch
             {
-                // Ignore transient write errors during heartbeat
+                // Ignore transient write errors while device is powered down
             }
         }
     }
@@ -163,14 +166,25 @@ public class UnifyingReceiver : IDisposable
                     byte[] report = new byte[read];
                     Array.Copy(buffer, report, read);
 
-                    // Check for wireless connection / wake notification (Feature 0x00, Function 0x41)
-                    if (report.Length >= 4 && (report[0] == 0x11 || report[0] == 0x10) && report[1] == DeviceIndex)
+                    // 1. HID++ 1.0/Short wireless connection event (0x10, DeviceIndex, 0x41)
+                    if (report[0] == 0x10 && report[1] == DeviceIndex && report[2] == 0x41)
                     {
-                        if (report[2] == 0x00 && report[3] == 0x41)
+                        Log("[Receiver] Hardware connection event detected (0x41)! Re-activating Raw Touch Mode...");
+                        ThreadPool.QueueUserWorkItem(_ =>
                         {
-                            Log("Device connection/wakeup notification detected. Re-activating Raw Touch Mode...");
+                            Thread.Sleep(150);
                             UnlockRawMode();
-                        }
+                        });
+                    }
+                    // 2. HID++ 2.0/Long root notification (0x11, DeviceIndex, 0x00)
+                    else if (report[0] == 0x11 && report[1] == DeviceIndex && report[2] == 0x00)
+                    {
+                        Log("[Receiver] Hardware wakeup / device announcement detected! Re-activating Raw Touch Mode...");
+                        ThreadPool.QueueUserWorkItem(_ =>
+                        {
+                            Thread.Sleep(100);
+                            UnlockRawMode();
+                        });
                     }
 
                     ReportReceived?.Invoke(report);
