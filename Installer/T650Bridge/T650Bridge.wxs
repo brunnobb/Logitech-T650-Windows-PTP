@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <?ifndef LicenseRtf ?>
+  <?define LicenseRtf = "..\License.rtf" ?>
+  <?endif ?>
   <Product Id="*"
            Name="Logitech T650 Precision Touchpad Bridge"
            Language="1033"
@@ -113,6 +116,7 @@
 
     <!-- UI Configuration -->
     <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
+    <WixVariable Id="WixUILicenseRtf" Value="$(var.LicenseRtf)" />
     <UIRef Id="WixUI_InstallDir" />
 
     <!-- Optional Launch on Exit -->

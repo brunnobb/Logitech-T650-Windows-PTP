@@ -66,7 +66,8 @@ if (-not (Test-Path $objDir)) { New-Item -ItemType Directory -Path $objDir -Forc
 $wxsFile = Join-Path $scriptDir "T650Bridge.wxs"
 $wixObj = Join-Path $objDir "T650Bridge.wixobj"
 
-& $candle -nologo -arch x64 -dSourceDir="$publishDir" -out "$wixObj" -ext WixUIExtension -ext WixUtilExtension "$wxsFile"
+$licenseRtf = Join-Path $scriptDir "..\License.rtf"
+& $candle -nologo -arch x64 -dSourceDir="$publishDir" -dLicenseRtf="$licenseRtf" -out "$wixObj" -ext WixUIExtension -ext WixUtilExtension "$wxsFile"
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[Error] candle.exe compilation failed!" -ForegroundColor Red
     Exit 1

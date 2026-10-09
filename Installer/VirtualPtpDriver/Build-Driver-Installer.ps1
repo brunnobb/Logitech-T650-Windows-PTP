@@ -71,7 +71,8 @@ $wxsFile = Join-Path $scriptDir "VirtualPtpDriver.wxs"
 $wixObj = Join-Path $objDir "VirtualPtpDriver.wixobj"
 $iconPath = Join-Path $repoRoot "T650-Windows-PTP-Driver\T650Bridge\T650.ico"
 
-& $candle -nologo -arch x64 -dSourceDir="$driverPackageDir" -dActionDir="$scriptDir" -dIconPath="$iconPath" -out "$wixObj" -ext WixUIExtension "$wxsFile"
+$licenseRtf = Join-Path $scriptDir "..\License.rtf"
+& $candle -nologo -arch x64 -dSourceDir="$driverPackageDir" -dActionDir="$scriptDir" -dIconPath="$iconPath" -dLicenseRtf="$licenseRtf" -out "$wixObj" -ext WixUIExtension "$wxsFile"
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[Error] candle.exe compilation failed!" -ForegroundColor Red
     Exit 1
