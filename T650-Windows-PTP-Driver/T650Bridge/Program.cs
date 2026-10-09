@@ -136,7 +136,6 @@ class Program
         }
 
         tray.UpdateStatus("Active (Streaming)", isConnected: true, isStreaming: true, isPaused: !enableGestures);
-        tray.ShowBalloon("Logitech T650 Active", "Multi-touch gestures ready. Right-click taskbar icon to manage.", System.Windows.Forms.ToolTipIcon.Info);
 
         Console.ForegroundColor = ConsoleColor.Green;
         Console.WriteLine("\n[Active] T650 Multi-touch stream is live! Try touching, scrolling, or swiping on the pad.\n");
@@ -144,6 +143,18 @@ class Program
 
         Console.WriteLine("[Tray] Taskbar notification icon added. Right-click icon for start/stop & controls.");
         Console.WriteLine("[Keys] Press 'r' anytime to re-wake/unlock | Press 'h' to hide/show console | Press 'q' to exit.");
+
+        bool autoHide = !args.Contains("--console") && !args.Contains("--no-hide");
+        if (autoHide)
+        {
+            Console.WriteLine("[Tray] Connection successful! Minimizing console to system tray...");
+            Thread.Sleep(800);
+            tray.HideConsole(notifyUser: true);
+        }
+        else
+        {
+            tray.ShowBalloon("Logitech T650 Active", "Multi-touch gestures ready. Right-click taskbar icon to manage.", System.Windows.Forms.ToolTipIcon.Info);
+        }
 
         bool canReadKey = false;
         try

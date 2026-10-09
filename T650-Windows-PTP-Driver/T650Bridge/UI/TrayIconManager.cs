@@ -193,6 +193,34 @@ public class TrayIconManager : IDisposable
         });
     }
 
+    public void HideConsole(bool notifyUser = true)
+    {
+        IntPtr hWnd = GetConsoleWindow();
+        if (hWnd == IntPtr.Zero) return;
+
+        ShowWindow(hWnd, SW_HIDE);
+        IsConsoleHidden = true;
+        if (_toggleConsoleItem != null)
+            _toggleConsoleItem.Text = "🔳 Show Console Window";
+
+        if (notifyUser)
+        {
+            ShowBalloon("Logitech T650 Connected", "Gestures active! Minimized to tray. Double-click icon to open console.", ToolTipIcon.Info);
+        }
+    }
+
+    public void ShowConsole()
+    {
+        IntPtr hWnd = GetConsoleWindow();
+        if (hWnd == IntPtr.Zero) return;
+
+        ShowWindow(hWnd, SW_RESTORE);
+        ShowWindow(hWnd, SW_SHOW);
+        IsConsoleHidden = false;
+        if (_toggleConsoleItem != null)
+            _toggleConsoleItem.Text = "🔲 Hide Console to Tray";
+    }
+
     public void ToggleConsoleWindow()
     {
         IntPtr hWnd = GetConsoleWindow();
@@ -200,19 +228,11 @@ public class TrayIconManager : IDisposable
 
         if (IsWindowVisible(hWnd))
         {
-            ShowWindow(hWnd, SW_HIDE);
-            IsConsoleHidden = true;
-            if (_toggleConsoleItem != null)
-                _toggleConsoleItem.Text = "🔳 Show Console Window";
-            ShowBalloon("Logitech T650 Running in Background", "Console minimized to system tray. Double-click the tray icon to restore.", ToolTipIcon.Info);
+            HideConsole(notifyUser: true);
         }
         else
         {
-            ShowWindow(hWnd, SW_RESTORE);
-            ShowWindow(hWnd, SW_SHOW);
-            IsConsoleHidden = false;
-            if (_toggleConsoleItem != null)
-                _toggleConsoleItem.Text = "🔲 Hide Console to Tray";
+            ShowConsole();
         }
     }
 
