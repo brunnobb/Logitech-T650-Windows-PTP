@@ -162,6 +162,17 @@ public class UnifyingReceiver : IDisposable
                 {
                     byte[] report = new byte[read];
                     Array.Copy(buffer, report, read);
+
+                    // Check for wireless connection / wake notification (Feature 0x00, Function 0x41)
+                    if (report.Length >= 4 && (report[0] == 0x11 || report[0] == 0x10) && report[1] == DeviceIndex)
+                    {
+                        if (report[2] == 0x00 && report[3] == 0x41)
+                        {
+                            Log("Device connection/wakeup notification detected. Re-activating Raw Touch Mode...");
+                            UnlockRawMode();
+                        }
+                    }
+
                     ReportReceived?.Invoke(report);
                 }
             }

@@ -112,7 +112,26 @@ class Program
             cts.Cancel();
         };
 
-        cts.Token.WaitHandle.WaitOne();
+        Console.WriteLine("[Keys] Press 'r' anytime to re-wake/re-unlock device | Press 'q' to exit.");
+
+        while (!cts.IsCancellationRequested)
+        {
+            if (Console.KeyAvailable)
+            {
+                var key = Console.ReadKey(intercept: true);
+                if (key.Key == ConsoleKey.R)
+                {
+                    Console.WriteLine("\n[User] Re-sending raw multi-touch unlock packet to T650...");
+                    receiver.UnlockRawMode();
+                }
+                else if (key.Key == ConsoleKey.Q)
+                {
+                    cts.Cancel();
+                    break;
+                }
+            }
+            Thread.Sleep(50);
+        }
 
         Console.WriteLine("\nShutting down bridge daemon...");
     }
