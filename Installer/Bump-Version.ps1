@@ -43,7 +43,7 @@ $bridgeWxsPath = Join-Path $repoRoot "Installer\T650Bridge\T650Bridge.wxs"
 if (Test-Path $bridgeWxsPath) {
     Write-Host "`n[2/4] Updating $bridgeWxsPath..." -ForegroundColor Yellow
     $wxsContent = Get-Content $bridgeWxsPath -Raw
-    $wxsContent = [regex]::Replace($wxsContent, 'Version="[\d\.]+"', "Version=""$fourPartVersion""")
+    $wxsContent = [regex]::Replace($wxsContent, '(?<!Installer)Version="[\d\.]+"', "Version=""$fourPartVersion""")
     Set-Content -Path $bridgeWxsPath -Value $wxsContent -Encoding utf8
     Write-Host "  -> Updated to Version $fourPartVersion" -ForegroundColor Green
 }
@@ -53,7 +53,7 @@ $driverWxsPath = Join-Path $repoRoot "Installer\VirtualPtpDriver\VirtualPtpDrive
 if (Test-Path $driverWxsPath) {
     Write-Host "`n[3/4] Updating $driverWxsPath..." -ForegroundColor Yellow
     $driverWxsContent = Get-Content $driverWxsPath -Raw
-    $driverWxsContent = [regex]::Replace($driverWxsContent, 'Version="[\d\.]+"', "Version=""$fourPartVersion""")
+    $driverWxsContent = [regex]::Replace($driverWxsContent, '(?<!Installer)Version="[\d\.]+"', "Version=""$fourPartVersion""")
     Set-Content -Path $driverWxsPath -Value $driverWxsContent -Encoding utf8
     Write-Host "  -> Updated to Version $fourPartVersion" -ForegroundColor Green
 }
