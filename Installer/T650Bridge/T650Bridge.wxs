@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product Id="*"
+           Name="Logitech T650 Precision Touchpad Bridge"
+           Language="1033"
+           Version="1.0.0.0"
+           Manufacturer="Logitech T650 Community Project"
+           UpgradeCode="355A1666-3125-4EC3-82E0-7F4B02825E0B">
+
+    <Package InstallerVersion="405"
+             Compressed="yes"
+             InstallScope="perMachine"
+             Platform="x64"
+             Description="Logitech T650 Windows Precision Touchpad (PTP) Bridge Daemon"
+             Comments="Bridges Logitech T650 multi-touch hardware reports into modern Windows gestures" />
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+
+    <MediaTemplate EmbedCab="yes" />
+
+    <!-- Application Icon -->
+    <Icon Id="AppIcon.ico" SourceFile="$(var.SourceDir)\T650.ico" />
+    <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />
+    <Property Id="ARPHELPLINK" Value="https://github.com/brunnobb/Logitech-T650-Windows-PTP" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/brunnobb/Logitech-T650-Windows-PTP" />
+
+    <!-- Auto-Start property (1 = enabled, can be disabled in Task Manager Startup tab) -->
+    <Property Id="AUTOSTART" Value="1" />
+
+    <!-- Directory Layout -->
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFiles64Folder">
+        <Directory Id="CompanyFolder" Name="Logitech T650 PTP">
+          <Directory Id="INSTALLFOLDER" Name="Bridge" />
+        </Directory>
+      </Directory>
+
+      <Directory Id="ProgramMenuFolder">
+        <Directory Id="ApplicationProgramsFolder" Name="Logitech T650 PTP" />
+      </Directory>
+
+      <Directory Id="DesktopFolder" Name="Desktop" />
+    </Directory>
+
+    <!-- Component 1: Application Files -->
+    <DirectoryRef Id="INSTALLFOLDER">
+      <Component Id="BridgeMainComponent" Guid="482BC68A-E9B3-459C-998E-4B7BB155C4CF" Win64="yes">
+        <File Id="T650BridgeExe" Source="$(var.SourceDir)\T650Bridge.exe" KeyPath="yes" />
+        <File Id="T650BridgeDll" Source="$(var.SourceDir)\T650Bridge.dll" />
+        <File Id="HidSharpDll" Source="$(var.SourceDir)\HidSharp.dll" />
+        <File Id="T650BridgeDepsJson" Source="$(var.SourceDir)\T650Bridge.deps.json" />
+        <File Id="T650BridgeRuntimeJson" Source="$(var.SourceDir)\T650Bridge.runtimeconfig.json" />
+        <File Id="T650Ico" Source="$(var.SourceDir)\T650.ico" />
+      </Component>
+
+      <!-- Component 2: Auto-Start Registry Entry (Task Manager Startup apps) -->
+      <Component Id="AutoStartComponent" Guid="41872789-7873-402F-AD54-39BFA2A1145A" Win64="yes">
+        <Condition>AUTOSTART = 1</Condition>
+        <RegistryValue Root="HKCU"
+                       Key="Software\Microsoft\Windows\CurrentVersion\Run"
+                       Name="Logitech T650 Bridge"
+                       Type="string"
+                       Value="&quot;[INSTALLFOLDER]T650Bridge.exe&quot; --silent"
+                       KeyPath="yes" />
+      </Component>
+    </DirectoryRef>
+
+    <!-- Component 3: Shortcuts -->
+    <DirectoryRef Id="ApplicationProgramsFolder">
+      <Component Id="ApplicationShortcutsComponent" Guid="CDEFE542-F290-478F-923A-F87355069A02" Win64="yes">
+        <!-- Start Menu Shortcut -->
+        <Shortcut Id="StartMenuBridgeShortcut"
+                  Name="Logitech T650 Bridge"
+                  Description="Start Logitech T650 Precision Touchpad Bridge"
+                  Target="[INSTALLFOLDER]T650Bridge.exe"
+                  WorkingDirectory="INSTALLFOLDER"
+                  Icon="AppIcon.ico" />
+
+        <!-- Start Menu Shortcut (with Diagnostic Console) -->
+        <Shortcut Id="StartMenuBridgeConsoleShortcut"
+                  Name="Logitech T650 Bridge (Console Diag)"
+                  Description="Start Logitech T650 Bridge with verbose diagnostics console"
+                  Target="[INSTALLFOLDER]T650Bridge.exe"
+                  Arguments="--console"
+                  WorkingDirectory="INSTALLFOLDER"
+                  Icon="AppIcon.ico" />
+
+        <!-- Desktop Shortcut -->
+        <Shortcut Id="DesktopBridgeShortcut"
+                  Directory="DesktopFolder"
+                  Name="Logitech T650 Bridge"
+                  Description="Start Logitech T650 Precision Touchpad Bridge"
+                  Target="[INSTALLFOLDER]T650Bridge.exe"
+                  WorkingDirectory="INSTALLFOLDER"
+                  Icon="AppIcon.ico" />
+
+        <RemoveFolder Id="RemoveApplicationProgramsFolder" On="uninstall" />
+        <RegistryValue Root="HKCU"
+                       Key="Software\LogitechT650Ptp\Bridge"
+                       Name="Installed"
+                       Type="integer"
+                       Value="1"
+                       KeyPath="yes" />
+      </Component>
+    </DirectoryRef>
+
+    <!-- Features -->
+    <Feature Id="MainFeature" Title="Logitech T650 Bridge" Level="1">
+      <ComponentRef Id="BridgeMainComponent" />
+      <ComponentRef Id="AutoStartComponent" />
+      <ComponentRef Id="ApplicationShortcutsComponent" />
+    </Feature>
+
+    <!-- UI Configuration -->
+    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
+    <UIRef Id="WixUI_InstallDir" />
+
+    <!-- Optional Launch on Exit -->
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="Launch Logitech T650 Bridge in System Tray now" />
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1" />
+
+    <CustomAction Id="LaunchBridgeNow"
+                  FileKey="T650BridgeExe"
+                  ExeCommand="--silent"
+                  Execute="immediate"
+                  Impersonate="yes"
+                  Return="asyncNoWait" />
+
+    <UI>
+      <Publish Dialog="ExitDialog"
+               Control="Finish"
+               Event="DoAction"
+               Value="LaunchBridgeNow">WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 and NOT Installed</Publish>
+    </UI>
+
+  </Product>
+</Wix>

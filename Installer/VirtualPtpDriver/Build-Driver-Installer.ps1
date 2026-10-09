@@ -1,0 +1,75 @@
+# ==============================================================================
+# Build Script: Logitech T650 Virtual PTP Driver MSI Installer
+# Uses WiX Toolset v3.14 to compile and package VirtualPtpDriver-Setup.msi
+# ==============================================================================
+
+$ErrorActionPreference = "Stop"
+
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
+$repoRoot = Resolve-Path (Join-Path $scriptDir "..\..")
+$driverPackageDir = Join-Path $repoRoot "T650-Windows-PTP-Driver\VirtualPtpDriver\Package"
+$objDir = Join-Path $scriptDir "obj"
+$distDir = Join-Path $repoRoot "Dist"
+
+Write-Host "==========================================================" -ForegroundColor Cyan
+Write-Host " Building Logitech T650 Virtual PTP Driver Installer (MSI)" -ForegroundColor Cyan
+Write-Host "==========================================================" -ForegroundColor Cyan
+
+# 1. Locate WiX Toolset Binaries
+$wixBin = "C:\Program Files (x86)\WiX Toolset v3.14\bin"
+$candle = Join-Path $wixBin "candle.exe"
+$light = Join-Path $wixBin "light.exe"
+
+if (-not (Test-Path $candle) -or -not (Test-Path $light)) {
+    Write-Host "[Error] WiX Toolset v3.14 binaries not found at '$wixBin'!" -ForegroundColor Red
+    Exit 1
+}
+
+# 2. Verify driver package files exist
+$requiredFiles = @(
+    "VirtualPtpDriver.dll",
+    "VirtualPtpDriver.inf",
+    "virtualptpdriver.cat",
+    "T650TestCert.cer",
+    "devcon.exe"
+)
+
+foreach ($f in $requiredFiles) {
+    $fullPath = Join-Path $driverPackageDir $f
+    if (-not (Test-Path $fullPath)) {
+        Write-Host "[Error] Required driver file '$f' missing from '$driverPackageDir'!" -ForegroundColor Red
+        Exit 1
+    }
+}
+
+# 3. Compile WiX Source (.wxs -> .wixobj)
+Write-Host "`n[1/3] Compiling WiX Source with candle.exe..." -ForegroundColor Yellow
+if (-not (Test-Path $objDir)) { New-Item -ItemType Directory -Path $objDir -Force | Out-Null }
+$wxsFile = Join-Path $scriptDir "VirtualPtpDriver.wxs"
+$wixObj = Join-Path $objDir "VirtualPtpDriver.wixobj"
+$iconPath = Join-Path $repoRoot "T650-Windows-PTP-Driver\T650Bridge\T650.ico"
+
+& $candle -nologo -arch x64 -dSourceDir="$driverPackageDir" -dActionDir="$scriptDir" -dIconPath="$iconPath" -out "$wixObj" -ext WixUIExtension "$wxsFile"
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "[Error] candle.exe compilation failed!" -ForegroundColor Red
+    Exit 1
+}
+
+# 4. Link WiX Objects (.wixobj -> .msi)
+Write-Host "`n[2/3] Linking MSI Package with light.exe..." -ForegroundColor Yellow
+if (-not (Test-Path $distDir)) { New-Item -ItemType Directory -Path $distDir -Force | Out-Null }
+$msiOut = Join-Path $distDir "VirtualPtpDriver-Setup.msi"
+
+& $light -nologo -out "$msiOut" -ext WixUIExtension -sice:ICE69 -sice:ICE91 "$wixObj"
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "[Error] light.exe linking failed!" -ForegroundColor Red
+    Exit 1
+}
+
+# 5. Done
+$msiItem = Get-Item $msiOut
+Write-Host "`n==========================================================" -ForegroundColor Green
+Write-Host " Driver Installer Built Successfully!" -ForegroundColor Green
+Write-Host " Output File: $($msiItem.FullName)" -ForegroundColor White
+Write-Host " Size: $([math]::Round($msiItem.Length / 1KB, 2)) KB" -ForegroundColor Cyan
+Write-Host "==========================================================" -ForegroundColor Green
