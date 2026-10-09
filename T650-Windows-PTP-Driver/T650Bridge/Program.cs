@@ -45,6 +45,19 @@ class Program
             Console.ResetColor();
         };
 
+        using var ptpDriver = new PtpDriverClient();
+        bool ptpConnected = ptpDriver.Connect();
+        if (ptpConnected)
+        {
+            Console.ForegroundColor = ConsoleColor.Magenta;
+            Console.WriteLine("[Tier 2] Connected to Virtual PTP Driver! Injecting directly into Windows Touch Stack.");
+            Console.ResetColor();
+        }
+        else
+        {
+            Console.WriteLine("[Tier 1] Virtual PTP Driver not detected. Running high-performance software gesture engine.");
+        }
+
         long frameIndex = 0;
         var sw = Stopwatch.StartNew();
 
@@ -56,8 +69,12 @@ class Program
             // 1. Build standard Microsoft PTP Report
             var ptpReport = PtpTouchReport.FromTouchFrame(frame, scanTime);
 
-            // 2. Process gestures if enabled
-            if (enableGestures)
+            // 2. Inject to Driver (Tier 2) or fallback to software gesture engine (Tier 1)
+            if (ptpDriver.IsConnected)
+            {
+                ptpDriver.InjectReport(ptpReport);
+            }
+            else if (enableGestures)
             {
                 gestureEngine.ProcessFrame(frame);
             }

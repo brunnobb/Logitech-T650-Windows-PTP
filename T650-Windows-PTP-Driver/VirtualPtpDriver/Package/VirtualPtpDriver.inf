@@ -1,0 +1,59 @@
+;
+; VirtualPtpDriver.inf
+; Installation file for Logitech T650 Virtual Precision Touchpad Driver
+;
+
+[Version]
+Signature   = "$WINDOWS NT$"
+Class       = HIDClass
+ClassGuid   = {745a17a0-74d3-11d0-b6fe-00a0c90f57da}
+Provider    = %ProviderString%
+CatalogFile = VirtualPtpDriver.cat
+DriverVer   = 10/09/2026,1.0.0.0
+PnpLockDown = 1
+
+[DestinationDirs]
+DefaultDestDir = 13
+
+[SourceDisksNames]
+1 = %DiskName%,,,""
+
+[SourceDisksFiles]
+VirtualPtpDriver.dll = 1,,
+
+[Manufacturer]
+%ManufacturerString% = Standard,NTamd64.10.0...16299
+
+[Standard.NTamd64.10.0...16299]
+%DeviceDesc% = VirtualPtpDriver_Install, Root\T650VirtualPtp
+
+[VirtualPtpDriver_Install.NT]
+CopyFiles = VirtualPtpDriver_Files
+
+[VirtualPtpDriver_Files]
+VirtualPtpDriver.dll
+
+[VirtualPtpDriver_Install.NT.Services]
+AddService = WUDFRd,0x000001fa,WUDFService_Install
+
+[WUDFService_Install]
+DisplayName   = %WudfRdDisplayName%
+ServiceType   = 1
+StartType     = 3
+ErrorControl  = 1
+ServiceBinary = %12%\WUDFRd.sys
+
+[VirtualPtpDriver_Install.NT.Wdf]
+UmdfService = VirtualPtpDriver, VirtualPtpDriver_Install_Umdf
+UmdfServiceOrder = VirtualPtpDriver
+
+[VirtualPtpDriver_Install_Umdf]
+UmdfLibraryVersion = 2.35.0
+ServiceBinary = %13%\VirtualPtpDriver.dll
+
+[Strings]
+ManufacturerString = "T650 Open Source Community"
+ProviderString     = "T650 Project"
+DiskName           = "T650 Virtual Precision Touchpad Installation Disk"
+DeviceDesc         = "Logitech T650 Precision Touchpad (Virtual PTP)"
+WudfRdDisplayName  = "Windows Driver Foundation - User-mode Driver Framework Reflector"

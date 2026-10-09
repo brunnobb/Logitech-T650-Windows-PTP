@@ -28,15 +28,18 @@ Release/
 ipch/
 
 # Driver Build Artifacts & Packages
-Package/
 *.sys
 *.cer
 *.cat
-*.inf
 _reboots.log
 *.wdf
 *.lastcodeanalysissucceeded
 DriverTest/
+devcon.exe
+T650-Windows-PTP-Driver/VirtualPtpDriver/Package/*.dll
+T650-Windows-PTP-Driver/VirtualPtpDriver/Package/*.cat
+T650-Windows-PTP-Driver/VirtualPtpDriver/Package/*.cer
+T650-Windows-PTP-Driver/VirtualPtpDriver/Package/devcon.exe
 
 # Logs & Temporary files
 *.log

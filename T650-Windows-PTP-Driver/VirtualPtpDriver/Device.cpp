@@ -1,3 +1,5 @@
+#include <windows.h>
+#include <initguid.h>
 #include "Device.h"
 #include "Queue.h"
 
