@@ -20,8 +20,18 @@ typedef struct _PTP_TOUCH_REPORT {
 
 typedef struct _PTP_DEVICE_CAPS_REPORT {
     UCHAR ReportId; // 0x02
-    UCHAR MaxContacts; // 5
+    UCHAR Caps;     // 5 contacts, ClickPad
 } PTP_DEVICE_CAPS_REPORT, *PPTP_DEVICE_CAPS_REPORT;
+
+typedef struct _PTP_INPUT_MODE_REPORT {
+    UCHAR ReportId; // 0x03
+    UCHAR Mode;     // 0 = Mouse, 3 = PTP
+} PTP_INPUT_MODE_REPORT, *PPTP_INPUT_MODE_REPORT;
+
+typedef struct _PTP_FUNCTION_SWITCH_REPORT {
+    UCHAR ReportId; // 0x04
+    UCHAR Switch;   // 3 = Surface + Button
+} PTP_FUNCTION_SWITCH_REPORT, *PPTP_FUNCTION_SWITCH_REPORT;
 
 #include <poppack.h>
 

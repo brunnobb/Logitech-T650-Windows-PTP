@@ -11,6 +11,8 @@ typedef struct _DEVICE_CONTEXT {
     WDFDEVICE Device;
     WDFQUEUE DefaultQueue;
     WDFQUEUE ManualReportQueue;
+    UCHAR InputMode;        // Report ID 3: 0 = Mouse, 3 = PTP (default 3)
+    UCHAR FunctionSwitch;   // Report ID 4: 1 = Button, 2 = Surface, 3 = Both (default 3)
 } DEVICE_CONTEXT, *PDEVICE_CONTEXT;
 
 WDF_DECLARE_CONTEXT_TYPE_WITH_NAME(DEVICE_CONTEXT, DeviceGetContext)

@@ -22,6 +22,8 @@ NTSTATUS DeviceCreate(_Inout_ PWDFDEVICE_INIT DeviceInit)
 
     context = DeviceGetContext(device);
     context->Device = device;
+    context->InputMode = 0x03; // Default to Precision Touchpad mode
+    context->FunctionSwitch = 0x03; // Default to Surface contacts + Button state enabled
 
     // Register device interface so the user-space Bridge Daemon can send IOCTLs
     status = WdfDeviceCreateDeviceInterface(
