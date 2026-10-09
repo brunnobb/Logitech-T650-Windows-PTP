@@ -1,6 +1,6 @@
 ;
 ; VirtualPtpDriver.inf
-; Installation file for Logitech T650 Virtual Precision Touchpad Driver
+; Installation file for Logitech T650 Virtual Precision Touchpad Driver (UMDF 2 HID Minidriver)
 ;
 
 [Version]
@@ -33,19 +33,36 @@ CopyFiles = VirtualPtpDriver_Files
 [VirtualPtpDriver_Files]
 VirtualPtpDriver.dll
 
-[VirtualPtpDriver_Install.NT.Services]
-AddService = WUDFRd,0x000001fa,WUDFService_Install
+[VirtualPtpDriver_Install.NT.HW]
+AddReg = VirtualPtpDriver_Install_HW.AddReg
 
-[WUDFService_Install]
+[VirtualPtpDriver_Install_HW.AddReg]
+HKR,,"LowerFilters",0x00010000,"WUDFRd"
+
+[VirtualPtpDriver_Install.NT.Services]
+AddService = mshidumdf, 0x000001fa, MSHIDUMDF_ServiceInstall
+AddService = WUDFRd,    0x000001f8, WUDFRD_ServiceInstall
+
+[MSHIDUMDF_ServiceInstall]
+ServiceType   = 1                  ; SERVICE_KERNEL_DRIVER
+StartType     = 3                  ; SERVICE_DEMAND_START
+ErrorControl  = 1                  ; SERVICE_ERROR_NORMAL
+ServiceBinary = %12%\mshidumdf.sys
+
+[WUDFRD_ServiceInstall]
 DisplayName   = %WudfRdDisplayName%
-ServiceType   = 1
-StartType     = 3
-ErrorControl  = 1
+ServiceType   = 1                  ; SERVICE_KERNEL_DRIVER
+StartType     = 3                  ; SERVICE_DEMAND_START
+ErrorControl  = 1                  ; SERVICE_ERROR_NORMAL
 ServiceBinary = %12%\WUDFRd.sys
 
 [VirtualPtpDriver_Install.NT.Wdf]
-UmdfService = VirtualPtpDriver, VirtualPtpDriver_Install_Umdf
-UmdfServiceOrder = VirtualPtpDriver
+UmdfService                 = VirtualPtpDriver, VirtualPtpDriver_Install_Umdf
+UmdfServiceOrder            = VirtualPtpDriver
+UmdfKernelModeClientPolicy  = AllowKernelModeClients
+UmdfMethodNeitherAction     = Copy
+UmdfFileObjectPolicy        = AllowNullAndUnknownFileObjects
+UmdfFsContextUsePolicy      = CanUseFsContext2
 
 [VirtualPtpDriver_Install_Umdf]
 UmdfLibraryVersion = 2.35.0

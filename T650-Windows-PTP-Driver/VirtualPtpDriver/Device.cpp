@@ -12,6 +12,9 @@ NTSTATUS DeviceCreate(_Inout_ PWDFDEVICE_INIT DeviceInit)
 
     WDF_OBJECT_ATTRIBUTES_INIT_CONTEXT_TYPE(&deviceAttributes, DEVICE_CONTEXT);
 
+    // Filter driver under MsHidUmdf.sys
+    WdfFdoInitSetFilter(DeviceInit);
+
     status = WdfDeviceCreate(&DeviceInit, &deviceAttributes, &device);
     if (!NT_SUCCESS(status)) {
         return status;
