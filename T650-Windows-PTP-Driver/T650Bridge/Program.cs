@@ -3,6 +3,7 @@ using T650Bridge.Gesture;
 using T650Bridge.Hidpp;
 using T650Bridge.Ptp;
 using T650Bridge.Touch;
+using T650Bridge.UI;
 
 namespace T650Bridge;
 
@@ -93,17 +94,8 @@ class Program
             }
         };
 
-        if (!receiver.Connect())
-        {
-            Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine("\n[Error] Could not initialize connection to Logitech Unifying receiver.");
-            Console.ResetColor();
-            return;
-        }
-
-        Console.ForegroundColor = ConsoleColor.Green;
-        Console.WriteLine("\n[Active] T650 Multi-touch stream is live! Try touching, scrolling, or swiping on the pad.\n");
-        Console.ResetColor();
+        using var tray = new TrayIconManager();
+        tray.UpdateStatus("Initializing...", isConnected: false, isStreaming: false, isPaused: false);
 
         using var cts = new CancellationTokenSource();
         Console.CancelKeyPress += (s, e) =>
@@ -112,7 +104,46 @@ class Program
             cts.Cancel();
         };
 
-        Console.WriteLine("[Keys] Press 'r' anytime to re-wake/re-unlock device | Press 'q' to exit.");
+        tray.ToggleStartStop += () =>
+        {
+            enableGestures = !enableGestures;
+            string stateMsg = enableGestures ? "Active (Gestures Running)" : "Paused (Standard Mouse Only)";
+            Console.WriteLine($"\n[Tray] Gestures toggled -> {stateMsg}");
+            tray.UpdateStatus(enableGestures ? "Active" : "Paused", receiver.IsConnected, isStreaming: true, isPaused: !enableGestures);
+        };
+
+        tray.RequestRewake += () =>
+        {
+            Console.WriteLine("\n[Tray] Re-sending raw multi-touch unlock packet to T650...");
+            receiver.UnlockRawMode();
+            tray.ShowBalloon("Logitech T650", "Re-sent raw touch mode unlock command to pad.");
+        };
+
+        tray.RequestExit += () =>
+        {
+            Console.WriteLine("\n[Tray] Exit requested from taskbar menu.");
+            cts.Cancel();
+        };
+
+        if (!receiver.Connect())
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine("\n[Error] Could not initialize connection to Logitech Unifying receiver.");
+            Console.ResetColor();
+            tray.UpdateStatus("Receiver Disconnected", isConnected: false, isStreaming: false, isPaused: false);
+            tray.ShowBalloon("Logitech T650 Error", "Could not connect to Logitech Unifying receiver.", System.Windows.Forms.ToolTipIcon.Error);
+            return;
+        }
+
+        tray.UpdateStatus("Active (Streaming)", isConnected: true, isStreaming: true, isPaused: !enableGestures);
+        tray.ShowBalloon("Logitech T650 Active", "Multi-touch gestures ready. Right-click taskbar icon to manage.", System.Windows.Forms.ToolTipIcon.Info);
+
+        Console.ForegroundColor = ConsoleColor.Green;
+        Console.WriteLine("\n[Active] T650 Multi-touch stream is live! Try touching, scrolling, or swiping on the pad.\n");
+        Console.ResetColor();
+
+        Console.WriteLine("[Tray] Taskbar notification icon added. Right-click icon for start/stop & controls.");
+        Console.WriteLine("[Keys] Press 'r' anytime to re-wake/unlock | Press 'h' to hide/show console | Press 'q' to exit.");
 
         while (!cts.IsCancellationRequested)
         {
@@ -123,6 +154,10 @@ class Program
                 {
                     Console.WriteLine("\n[User] Re-sending raw multi-touch unlock packet to T650...");
                     receiver.UnlockRawMode();
+                }
+                else if (key.Key == ConsoleKey.H)
+                {
+                    tray.ToggleConsoleWindow();
                 }
                 else if (key.Key == ConsoleKey.Q)
                 {
