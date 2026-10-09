@@ -105,12 +105,16 @@ If executing commands step-by-step:
 # 1. Build and test Bridge .NET project
 dotnet build "T650-Windows-PTP-Driver\T650Bridge" -c Release
 
-# 2. Build both MSI installers
-pwsh -File "Installer\Build-All-Installers.ps1"
+# 2. Build both MSI installers (with versioned names and SHA-256 hashes)
+pwsh -File "Installer\Build-All-Installers.ps1" -Version "1.1.0"
 
-# 3. Output artifacts are placed in:
-#    Dist\T650Bridge-Setup.msi
-#    Dist\VirtualPtpDriver-Setup.msi
+# 3. Output artifacts are placed in Dist\:
+#    Dist\T650Bridge-Setup-v1.1.0.msi
+#    Dist\T650Bridge-Setup-v1.1.0.msi.sha256
+#    Dist\VirtualPtpDriver-Setup-v1.1.0.msi
+#    Dist\VirtualPtpDriver-Setup-v1.1.0.msi.sha256
+#    Dist\SHA256SUMS.txt
+#    (Convenience unversioned copies T650Bridge-Setup.msi and VirtualPtpDriver-Setup.msi are also maintained)
 
 # 4. Git commit and tag release
 git add -u

@@ -1,7 +1,11 @@
 # ==============================================================================
 # Build Script: Logitech T650 Virtual PTP Driver MSI Installer
-# Uses WiX Toolset v3.14 to compile and package VirtualPtpDriver-Setup.msi
+# Uses WiX Toolset v3.14 to compile and package VirtualPtpDriver-Setup-v<Version>.msi
 # ==============================================================================
+
+param(
+    [string]$Version
+)
 
 $ErrorActionPreference = "Stop"
 
@@ -11,8 +15,26 @@ $driverPackageDir = Join-Path $repoRoot "T650-Windows-PTP-Driver\VirtualPtpDrive
 $objDir = Join-Path $scriptDir "obj"
 $distDir = Join-Path $repoRoot "Dist"
 
+# Auto-detect version if not specified
+if (-not $Version) {
+    $wxsFile = Join-Path $scriptDir "VirtualPtpDriver.wxs"
+    if (Test-Path $wxsFile) {
+        $wxsContent = Get-Content $wxsFile -Raw
+        if ($wxsContent -match 'Product\s+[^>]*Version="(\d+\.\d+\.\d+)') {
+            $Version = $Matches[1]
+        } else {
+            $Version = "1.0.0"
+        }
+    } else {
+        $Version = "1.0.0"
+    }
+}
+
+$msiFileName = "VirtualPtpDriver-Setup-v$Version.msi"
+
 Write-Host "==========================================================" -ForegroundColor Cyan
-Write-Host " Building Logitech T650 Virtual PTP Driver Installer (MSI)" -ForegroundColor Cyan
+Write-Host " Building Logitech T650 Virtual PTP Driver Installer v$Version" -ForegroundColor Cyan
+Write-Host " Target File: $msiFileName" -ForegroundColor White
 Write-Host "==========================================================" -ForegroundColor Cyan
 
 # 1. Locate WiX Toolset Binaries
@@ -58,7 +80,7 @@ if ($LASTEXITCODE -ne 0) {
 # 4. Link WiX Objects (.wixobj -> .msi)
 Write-Host "`n[2/3] Linking MSI Package with light.exe..." -ForegroundColor Yellow
 if (-not (Test-Path $distDir)) { New-Item -ItemType Directory -Path $distDir -Force | Out-Null }
-$msiOut = Join-Path $distDir "VirtualPtpDriver-Setup.msi"
+$msiOut = Join-Path $distDir $msiFileName
 
 & $light -nologo -out "$msiOut" -ext WixUIExtension -sice:ICE69 -sice:ICE91 "$wixObj"
 if ($LASTEXITCODE -ne 0) {
@@ -66,10 +88,21 @@ if ($LASTEXITCODE -ne 0) {
     Exit 1
 }
 
-# 5. Done
+# Keep a convenience copy without version string
+Copy-Item -Path $msiOut -Destination (Join-Path $distDir "VirtualPtpDriver-Setup.msi") -Force
+
+# 5. Compute SHA-256 Checksum
+Write-Host "`n[3/3] Calculating SHA-256 Checksum..." -ForegroundColor Yellow
+$hashInfo = Get-FileHash -Path $msiOut -Algorithm SHA256
+$hashHex = $hashInfo.Hash.ToLower()
+$shaFile = "$msiOut.sha256"
+"$hashHex  $msiFileName" | Set-Content -Path $shaFile -Encoding ascii
+
 $msiItem = Get-Item $msiOut
 Write-Host "`n==========================================================" -ForegroundColor Green
 Write-Host " Driver Installer Built Successfully!" -ForegroundColor Green
 Write-Host " Output File: $($msiItem.FullName)" -ForegroundColor White
-Write-Host " Size: $([math]::Round($msiItem.Length / 1KB, 2)) KB" -ForegroundColor Cyan
+Write-Host " Size:        $([math]::Round($msiItem.Length / 1KB, 2)) KB" -ForegroundColor Cyan
+Write-Host " SHA-256:     $hashHex" -ForegroundColor Yellow
+Write-Host " Hash File:   $shaFile" -ForegroundColor Gray
 Write-Host "==========================================================" -ForegroundColor Green

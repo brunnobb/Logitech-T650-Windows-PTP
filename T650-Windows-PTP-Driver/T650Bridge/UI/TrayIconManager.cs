@@ -29,6 +29,7 @@ public class TrayIconManager : IDisposable
     private ToolStripMenuItem? _statusItem;
     private ToolStripMenuItem? _startStopItem;
     private ToolStripMenuItem? _rewakeItem;
+    private ToolStripMenuItem? _notificationsItem;
     private ToolStripMenuItem? _toggleConsoleItem;
     private ToolStripMenuItem? _exitItem;
 
@@ -41,6 +42,7 @@ public class TrayIconManager : IDisposable
 
     public bool IsActive { get; private set; } = true;
     public bool IsConsoleHidden { get; private set; } = false;
+    public bool EnableNotifications { get; set; } = false;
 
     public event Action? ToggleStartStop;
     public event Action? RequestRewake;
@@ -81,6 +83,15 @@ public class TrayIconManager : IDisposable
 
         _contextMenu = new ContextMenuStrip();
         
+        // Header: Version Display
+        var version = typeof(TrayIconManager).Assembly.GetName().Version?.ToString(3) ?? "1.1.1";
+        var titleItem = new ToolStripMenuItem($"Logitech T650 Bridge v{version}")
+        {
+            Enabled = false,
+            Font = new Font(Control.DefaultFont, FontStyle.Italic)
+        };
+        _contextMenu.Items.Add(titleItem);
+
         // 1. Status Display
         _statusItem = new ToolStripMenuItem("Status: Initializing...")
         {
@@ -97,6 +108,17 @@ public class TrayIconManager : IDisposable
         // 3. Re-wake / Re-unlock T650
         _rewakeItem = new ToolStripMenuItem("🔄 Re-wake & Unlock Pad", null, (s, e) => RequestRewake?.Invoke());
         _contextMenu.Items.Add(_rewakeItem);
+
+        // 4. Desktop Notifications Toggle
+        _notificationsItem = new ToolStripMenuItem(EnableNotifications ? "🔔 Desktop Notifications (Enabled)" : "🔕 Desktop Notifications (Muted)", null, (s, e) =>
+        {
+            EnableNotifications = !EnableNotifications;
+            if (_notificationsItem != null)
+            {
+                _notificationsItem.Text = EnableNotifications ? "🔔 Desktop Notifications (Enabled)" : "🔕 Desktop Notifications (Muted)";
+            }
+        });
+        _contextMenu.Items.Add(_notificationsItem);
 
         _contextMenu.Items.Add(new ToolStripSeparator());
 
@@ -246,15 +268,17 @@ public class TrayIconManager : IDisposable
         return text.Length > 63 ? text.Substring(0, 60) + "..." : text;
     }
 
-    public void ShowBalloon(string title, string message, ToolTipIcon icon = ToolTipIcon.Info)
+    public void ShowBalloon(string title, string message, ToolTipIcon icon = ToolTipIcon.Info, bool force = false)
     {
+        if (!EnableNotifications && !force) return;
+
         PostToUiThread(() =>
         {
             _notifyIcon?.ShowBalloonTip(3000, title, message, icon);
         });
     }
 
-    public void HideConsole(bool notifyUser = true)
+    public void HideConsole(bool notifyUser = false)
     {
         IntPtr hWnd = GetConsoleWindow();
         if (hWnd == IntPtr.Zero) return;
@@ -264,7 +288,7 @@ public class TrayIconManager : IDisposable
         if (_toggleConsoleItem != null)
             _toggleConsoleItem.Text = "🔳 Show Console Window";
 
-        if (notifyUser)
+        if (notifyUser && EnableNotifications)
         {
             ShowBalloon("Logitech T650 Connected", "Gestures active! Minimized to tray. Double-click icon to open console.", ToolTipIcon.Info);
         }

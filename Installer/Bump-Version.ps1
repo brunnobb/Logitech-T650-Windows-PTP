@@ -71,7 +71,7 @@ if (Test-Path $inxPath) {
 # 6. Rebuild All Installers
 Write-Host "`n>>> Rebuilding all installers for version $NewVersion..." -ForegroundColor Cyan
 $buildScript = Join-Path $scriptDir "Build-All-Installers.ps1"
-& pwsh -File "$buildScript"
+& pwsh -File "$buildScript" -Version "$NewVersion"
 
 Write-Host "`n==========================================================" -ForegroundColor Green
 Write-Host " Version bump to $NewVersion complete!" -ForegroundColor Green

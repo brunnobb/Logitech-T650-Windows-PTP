@@ -1,7 +1,11 @@
 # ==============================================================================
 # Build Script: Logitech T650 Bridge MSI Installer
-# Uses WiX Toolset v3.14 to compile and package T650Bridge-Setup.msi
+# Uses WiX Toolset v3.14 to compile and package T650Bridge-Setup-v<Version>.msi
 # ==============================================================================
+
+param(
+    [string]$Version
+)
 
 $ErrorActionPreference = "Stop"
 
@@ -12,8 +16,21 @@ $publishDir = Join-Path $scriptDir "bin\publish"
 $objDir = Join-Path $scriptDir "obj"
 $distDir = Join-Path $repoRoot "Dist"
 
+# Auto-detect version if not specified
+if (-not $Version) {
+    $csprojContent = Get-Content $bridgeProj -Raw
+    if ($csprojContent -match '<Version>([\d\.]+)</Version>') {
+        $Version = $Matches[1]
+    } else {
+        $Version = "1.0.0"
+    }
+}
+
+$msiFileName = "T650Bridge-Setup-v$Version.msi"
+
 Write-Host "==========================================================" -ForegroundColor Cyan
-Write-Host " Building Logitech T650 Bridge Installer (MSI)" -ForegroundColor Cyan
+Write-Host " Building Logitech T650 Bridge Installer v$Version" -ForegroundColor Cyan
+Write-Host " Target File: $msiFileName" -ForegroundColor White
 Write-Host "==========================================================" -ForegroundColor Cyan
 
 # 1. Locate WiX Toolset Binaries
@@ -58,7 +75,7 @@ if ($LASTEXITCODE -ne 0) {
 # 4. Link WiX Objects (.wixobj -> .msi)
 Write-Host "`n[3/4] Linking MSI Package with light.exe..." -ForegroundColor Yellow
 if (-not (Test-Path $distDir)) { New-Item -ItemType Directory -Path $distDir -Force | Out-Null }
-$msiOut = Join-Path $distDir "T650Bridge-Setup.msi"
+$msiOut = Join-Path $distDir $msiFileName
 
 & $light -nologo -out "$msiOut" -ext WixUIExtension -ext WixUtilExtension -sice:ICE69 -sice:ICE91 "$wixObj"
 if ($LASTEXITCODE -ne 0) {
@@ -66,10 +83,21 @@ if ($LASTEXITCODE -ne 0) {
     Exit 1
 }
 
-# 5. Done
+# Keep a convenience copy without version string
+Copy-Item -Path $msiOut -Destination (Join-Path $distDir "T650Bridge-Setup.msi") -Force
+
+# 5. Compute SHA-256 Checksum
+Write-Host "`n[4/4] Calculating SHA-256 Checksum..." -ForegroundColor Yellow
+$hashInfo = Get-FileHash -Path $msiOut -Algorithm SHA256
+$hashHex = $hashInfo.Hash.ToLower()
+$shaFile = "$msiOut.sha256"
+"$hashHex  $msiFileName" | Set-Content -Path $shaFile -Encoding ascii
+
 $msiItem = Get-Item $msiOut
 Write-Host "`n==========================================================" -ForegroundColor Green
-Write-Host " Installer Built Successfully!" -ForegroundColor Green
+Write-Host " Bridge Installer Built Successfully!" -ForegroundColor Green
 Write-Host " Output File: $($msiItem.FullName)" -ForegroundColor White
-Write-Host " Size: $([math]::Round($msiItem.Length / 1KB, 2)) KB" -ForegroundColor Cyan
+Write-Host " Size:        $([math]::Round($msiItem.Length / 1KB, 2)) KB" -ForegroundColor Cyan
+Write-Host " SHA-256:     $hashHex" -ForegroundColor Yellow
+Write-Host " Hash File:   $shaFile" -ForegroundColor Gray
 Write-Host "==========================================================" -ForegroundColor Green

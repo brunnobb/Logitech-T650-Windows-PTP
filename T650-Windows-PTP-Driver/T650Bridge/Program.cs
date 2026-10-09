@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Reflection;
 using T650Bridge.Gesture;
 using T650Bridge.Hidpp;
 using T650Bridge.Ptp;
@@ -11,16 +12,21 @@ class Program
 {
     static void Main(string[] args)
     {
+        var version = Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.1.1";
+
         Console.ForegroundColor = ConsoleColor.Cyan;
         Console.WriteLine("===============================================================");
-        Console.WriteLine(" Logitech T650 Windows Precision Touchpad (PTP) Bridge Daemon ");
+        Console.WriteLine($" Logitech T650 Windows Precision Touchpad (PTP) Bridge v{version} ");
         Console.WriteLine("===============================================================");
         Console.ResetColor();
 
+        Console.WriteLine($"[Version] Bridge Daemon v{version}");
         bool enableGestures = !args.Contains("--no-gesture");
+        bool enableNotifications = args.Contains("--notifications") || args.Contains("--balloon");
         bool verboseDiag = args.Contains("--diag") || args.Contains("--test") || (!args.Contains("--silent") && !args.Contains("--tray"));
 
         Console.WriteLine($"[Config] Gestures Enabled: {enableGestures}");
+        Console.WriteLine($"[Config] Desktop Notifications: {(enableNotifications ? "Enabled" : "Disabled (Quiet)")}");
         Console.WriteLine($"[Config] Diagnostic Display: {verboseDiag}");
 
         AttachToInteractiveDesktop();
@@ -98,6 +104,7 @@ class Program
         bool autoHide = !args.Contains("--console") && !args.Contains("--no-hide");
 
         using var tray = new TrayIconManager();
+        tray.EnableNotifications = enableNotifications;
         tray.UpdateState(DeviceConnectionState.SearchingForReceiver, isPaused: !enableGestures);
 
         if (silentStartup)

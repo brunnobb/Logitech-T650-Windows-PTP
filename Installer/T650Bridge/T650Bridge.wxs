@@ -3,7 +3,7 @@
   <Product Id="*"
            Name="Logitech T650 Precision Touchpad Bridge"
            Language="1033"
-           Version="1.1.1.0"
+           Version="1.1.2.0"
            Manufacturer="Logitech T650 Community Project"
            UpgradeCode="355A1666-3125-4EC3-82E0-7F4B02825E0B">
 
@@ -135,6 +135,7 @@
 
   </Product>
 </Wix>
+
 
 
 
