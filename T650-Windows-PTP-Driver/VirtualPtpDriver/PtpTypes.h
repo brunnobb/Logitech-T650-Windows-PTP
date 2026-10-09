@@ -25,5 +25,5 @@ typedef struct _PTP_DEVICE_CAPS_REPORT {
 
 #include <poppack.h>
 
-// IOCTL for injecting PTP reports from user-mode bridge
-#define IOCTL_PTP_INJECT_REPORT CTL_CODE(FILE_DEVICE_UNKNOWN, 0x801, METHOD_BUFFERED, FILE_WRITE_ACCESS)
+// IOCTL for injecting PTP reports from user-mode bridge (0x00222004)
+#define IOCTL_PTP_INJECT_REPORT CTL_CODE(FILE_DEVICE_UNKNOWN, 0x801, METHOD_BUFFERED, FILE_ANY_ACCESS)
