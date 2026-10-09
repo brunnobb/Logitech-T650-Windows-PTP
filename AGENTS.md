@@ -55,3 +55,75 @@ We will leverage two major open-source solutions to avoid reinventing the wheel:
 1.  **Hardware Reverse-Engineering (HID++ 2.0):** T650 does not speak standard USB HID. It speaks Logitech HID++ 2.0 over the Unifying receiver (0x046d / 0xc52b). We must send the specific feature activation command to bypass on-device gesture synthesis.
 2.  **Strict Windows PTP Validation:** Windows expects precise compliance. Dropped frames or timestamp jitters (common over 2.4 GHz) can disable gesture recognition. Scan timestamps must increment consistently using `QueryPerformanceCounter`.
 3.  **Driver Signing Constraints:** Running a custom virtual HID miniport requires a test-signed environment (`testsigning on`) for local development, as the PTP framework does not accept unsigned driver injections natively without a pre-signed virtual HID bus bridge.
+
+---
+
+## Versioning & Release Guidelines (AI Agent Reference)
+
+When an AI prompt requests a new release, version bump, or installer update (e.g., *"bump version to 1.1.0 and build installers"*), follow these standardized specifications.
+
+### 1. Versioning Standard
+
+* **Human & Git Version (SemVer):** `MAJOR.MINOR.PATCH` (e.g., `1.0.0`, `1.1.0`, `1.0.1`).
+* **Windows & WiX Version (4-Part):** `MAJOR.MINOR.PATCH.BUILD` (e.g., `1.0.0.0`, `1.1.0.0`).
+* **Important Windows Installer Rule:** Windows Installer (MSI) only compares the first **three** fields (`MAJOR.MINOR.PATCH`) to determine if an installed version is newer. The 4th field is ignored for upgrade checks. Therefore, every release must increment at least `PATCH` or `MINOR`.
+
+### 2. Canonical Version File Locations
+
+When changing versions, the following **4 files** must stay synchronized:
+
+| File | Target Element / Property | Example Value |
+| :--- | :--- | :--- |
+| [`T650Bridge.csproj`](file:///c:/Workspace/T650-Windows-PTP/T650-Windows-PTP-Driver/T650Bridge/T650Bridge.csproj) | `<Version>`, `<AssemblyVersion>`, `<FileVersion>` | `<Version>1.1.0</Version>`<br>`<AssemblyVersion>1.1.0.0</AssemblyVersion>` |
+| [`T650Bridge.wxs`](file:///c:/Workspace/T650-Windows-PTP/Installer/T650Bridge/T650Bridge.wxs) | `<Product Version="..." ...>` | `Version="1.1.0.0"` |
+| [`VirtualPtpDriver.wxs`](file:///c:/Workspace/T650-Windows-PTP/Installer/VirtualPtpDriver/VirtualPtpDriver.wxs) | `<Product Version="..." ...>` | `Version="1.1.0.0"` |
+| [`VirtualPtpDriver.inx`](file:///c:/Workspace/T650-Windows-PTP/T650-Windows-PTP-Driver/VirtualPtpDriver/VirtualPtpDriver.inx) | `DriverVer = MM/DD/YYYY,MAJOR.MINOR.PATCH.BUILD` | `DriverVer = 10/09/2026,1.1.0.0` |
+
+### 3. WiX Upgrade Rules (Strict Requirements for AI Prompts)
+
+1. **Keep `Product Id="*"` dynamic:** Never hardcode a GUID in `Product Id`. Setting `Id="*"` ensures WiX generates a new `ProductCode` GUID for each release, enabling smooth automatic upgrades.
+2. **Never change `UpgradeCode`:**
+   - Bridge Daemon UpgradeCode: `355A1666-3125-4EC3-82E0-7F4B02825E0B`
+   - Virtual Driver UpgradeCode: `71E9D2E0-72E7-4AD2-8498-27041365E996`
+   - Changing `UpgradeCode` causes Windows Installer to treat it as a different application rather than an upgrade.
+3. **MajorUpgrade Configuration:** `<MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />` handles replacing earlier releases automatically.
+
+### 4. Automated Version Bump (Preferred Method)
+
+An automated PowerShell script updates all files and rebuilds both MSIs in a single step:
+
+```powershell
+# Bump version to 1.1.0 across all files and recompile both MSIs:
+pwsh -File "Installer/Bump-Version.ps1" -NewVersion "1.1.0"
+```
+
+### 5. Manual Build & Packaging Commands
+
+If executing commands step-by-step:
+
+```powershell
+# 1. Build and test Bridge .NET project
+dotnet build "T650-Windows-PTP-Driver\T650Bridge" -c Release
+
+# 2. Build both MSI installers
+pwsh -File "Installer\Build-All-Installers.ps1"
+
+# 3. Output artifacts are placed in:
+#    Dist\T650Bridge-Setup.msi
+#    Dist\VirtualPtpDriver-Setup.msi
+
+# 4. Git commit and tag release
+git add -u
+git commit -m "chore(release): bump version to 1.1.0"
+git tag -a v1.1.0 -m "Release v1.1.0"
+git push origin main --tags
+```
+
+### 6. Auto-Start & Task Manager Verification
+
+The Bridge installer registers auto-start under:
+* **Registry Key:** `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`
+* **Entry Name:** `Logitech T650 Bridge`
+* **Command:** `"C:\Program Files\Logitech T650 PTP\Bridge\T650Bridge.exe" --silent`
+* **Behavior:** Visible in Windows Task Manager $\rightarrow$ **Startup apps** tab as **"Logitech T650 Bridge"**. Users can disable/enable it without Administrator rights.
+
