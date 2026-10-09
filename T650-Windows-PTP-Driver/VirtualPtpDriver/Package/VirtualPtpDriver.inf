@@ -65,7 +65,7 @@ UmdfFileObjectPolicy        = AllowNullAndUnknownFileObjects
 UmdfFsContextUsePolicy      = CanUseFsContext2
 
 [VirtualPtpDriver_Install_Umdf]
-UmdfLibraryVersion = 2.35.0
+UmdfLibraryVersion = 2.15.0
 ServiceBinary = %13%\VirtualPtpDriver.dll
 
 [Strings]
