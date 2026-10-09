@@ -94,8 +94,16 @@ class Program
             }
         };
 
+        bool silentStartup = args.Contains("--silent") || args.Contains("--tray") || args.Contains("--minimized");
+        bool autoHide = !args.Contains("--console") && !args.Contains("--no-hide");
+
         using var tray = new TrayIconManager();
-        tray.UpdateStatus("Initializing...", isConnected: false, isStreaming: false, isPaused: false);
+        tray.UpdateState(DeviceConnectionState.SearchingForReceiver, isPaused: !enableGestures);
+
+        if (silentStartup)
+        {
+            tray.HideConsole(notifyUser: false);
+        }
 
         using var cts = new CancellationTokenSource();
         Console.CancelKeyPress += (s, e) =>
@@ -109,7 +117,7 @@ class Program
             enableGestures = !enableGestures;
             string stateMsg = enableGestures ? "Active (Gestures Running)" : "Paused (Standard Mouse Only)";
             Console.WriteLine($"\n[Tray] Gestures toggled -> {stateMsg}");
-            tray.UpdateStatus(enableGestures ? "Active" : "Paused", receiver.IsConnected, isStreaming: true, isPaused: !enableGestures);
+            tray.UpdateState(receiver.State, isPaused: !enableGestures);
         };
 
         tray.RequestRewake += () =>
@@ -125,36 +133,55 @@ class Program
             cts.Cancel();
         };
 
-        if (!receiver.Connect())
+        bool hasEverStreamed = false;
+
+        receiver.StateChanged += state =>
         {
-            Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine("\n[Error] Could not initialize connection to Logitech Unifying receiver.");
-            Console.ResetColor();
-            tray.UpdateStatus("Receiver Disconnected", isConnected: false, isStreaming: false, isPaused: false);
-            tray.ShowBalloon("Logitech T650 Error", "Could not connect to Logitech Unifying receiver.", System.Windows.Forms.ToolTipIcon.Error);
-            return;
-        }
+            tray.UpdateState(state, isPaused: !enableGestures);
 
-        tray.UpdateStatus("Active (Streaming)", isConnected: true, isStreaming: true, isPaused: !enableGestures);
+            switch (state)
+            {
+                case DeviceConnectionState.SearchingForReceiver:
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.WriteLine("\n[Receiver] Waiting for Logitech Unifying receiver to be plugged in...");
+                    Console.ResetColor();
+                    tray.ShowBalloon("Logitech T650", "Waiting for Logitech Unifying receiver USB dongle.", System.Windows.Forms.ToolTipIcon.Warning);
+                    break;
 
-        Console.ForegroundColor = ConsoleColor.Green;
-        Console.WriteLine("\n[Active] T650 Multi-touch stream is live! Try touching, scrolling, or swiping on the pad.\n");
-        Console.ResetColor();
+                case DeviceConnectionState.ReceiverConnectedWaitingForPad:
+                    Console.ForegroundColor = ConsoleColor.DarkYellow;
+                    Console.WriteLine("\n[Receiver] Unifying receiver ready! Waiting for T650 Touchpad to power on...");
+                    Console.ResetColor();
+                    tray.ShowBalloon("Logitech T650", "Unifying receiver connected. Turn on your T650 touchpad.", System.Windows.Forms.ToolTipIcon.Info);
+                    break;
 
-        Console.WriteLine("[Tray] Taskbar notification icon added. Right-click icon for start/stop & controls.");
-        Console.WriteLine("[Keys] Press 'r' anytime to re-wake/unlock | Press 'h' to hide/show console | Press 'q' to exit.");
+                case DeviceConnectionState.TouchpadActive:
+                    Console.ForegroundColor = ConsoleColor.Green;
+                    Console.WriteLine("\n[Active] T650 Multi-touch stream is live! Try touching, scrolling, or swiping on the pad.\n");
+                    Console.ResetColor();
 
-        bool autoHide = !args.Contains("--console") && !args.Contains("--no-hide");
-        if (autoHide)
-        {
-            Console.WriteLine("[Tray] Connection successful! Minimizing console to system tray...");
-            Thread.Sleep(800);
-            tray.HideConsole(notifyUser: true);
-        }
-        else
-        {
-            tray.ShowBalloon("Logitech T650 Active", "Multi-touch gestures ready. Right-click taskbar icon to manage.", System.Windows.Forms.ToolTipIcon.Info);
-        }
+                    if (!hasEverStreamed)
+                    {
+                        hasEverStreamed = true;
+                        if (autoHide && !silentStartup && !tray.IsConsoleHidden)
+                        {
+                            Console.WriteLine("[Tray] Pad connected and active! Minimizing console to system tray...");
+                            Thread.Sleep(600);
+                            tray.HideConsole(notifyUser: true);
+                        }
+                        else
+                        {
+                            tray.ShowBalloon("Logitech T650 Active", "Multi-touch gestures ready. Right-click taskbar icon to manage.", System.Windows.Forms.ToolTipIcon.Info);
+                        }
+                    }
+                    break;
+            }
+        };
+
+        receiver.StartSupervisor();
+
+        Console.WriteLine("[Tray] Taskbar notification icon active. Right-click icon for start/stop & controls.");
+        Console.WriteLine("[Keys] Press 'r' anytime to re-wake/unlock | Press 'h' to hide/show console | Press 'q' to exit.\n");
 
         bool canReadKey = false;
         try

@@ -2,6 +2,7 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
+using T650Bridge.Hidpp;
 
 namespace T650Bridge.UI;
 
@@ -143,6 +144,66 @@ public class TrayIconManager : IDisposable
         }
     }
 
+    public void UpdateState(DeviceConnectionState state, bool isPaused)
+    {
+        PostToUiThread(() =>
+        {
+            string statusDesc;
+            Icon targetIcon;
+            string tooltip;
+
+            switch (state)
+            {
+                case DeviceConnectionState.SearchingForReceiver:
+                    statusDesc = "Waiting for Receiver...";
+                    targetIcon = _iconDisconnected ?? SystemIcons.Application;
+                    tooltip = "Logitech T650: Receiver Disconnected";
+                    if (_rewakeItem != null) _rewakeItem.Enabled = false;
+                    break;
+
+                case DeviceConnectionState.ReceiverConnectedWaitingForPad:
+                    statusDesc = "Receiver Connected (Turn On Pad)";
+                    targetIcon = _iconPaused ?? SystemIcons.Application;
+                    tooltip = "Logitech T650: Waiting for Pad";
+                    if (_rewakeItem != null) _rewakeItem.Enabled = true;
+                    break;
+
+                case DeviceConnectionState.TouchpadActive:
+                default:
+                    if (isPaused)
+                    {
+                        statusDesc = "Paused (Gestures Off)";
+                        targetIcon = _iconPaused ?? SystemIcons.Application;
+                        tooltip = "Logitech T650: Paused";
+                    }
+                    else
+                    {
+                        statusDesc = "Active (Streaming)";
+                        targetIcon = _iconActive ?? SystemIcons.Application;
+                        tooltip = "Logitech T650: Active (Streaming)";
+                    }
+                    if (_rewakeItem != null) _rewakeItem.Enabled = true;
+                    break;
+            }
+
+            if (_statusItem != null)
+            {
+                _statusItem.Text = $"Status: {statusDesc}";
+            }
+
+            if (_startStopItem != null)
+            {
+                _startStopItem.Text = isPaused ? "▶ Resume Gestures (Start)" : "⏸ Pause Gestures (Stop)";
+            }
+
+            if (_notifyIcon != null)
+            {
+                _notifyIcon.Icon = targetIcon;
+                _notifyIcon.Text = SafeTooltipText(tooltip);
+            }
+        });
+    }
+
     public void UpdateStatus(string statusText, bool isConnected, bool isStreaming, bool isPaused)
     {
         PostToUiThread(() =>
@@ -154,14 +215,7 @@ public class TrayIconManager : IDisposable
 
             if (_startStopItem != null)
             {
-                if (isPaused)
-                {
-                    _startStopItem.Text = "▶ Resume Gestures (Start)";
-                }
-                else
-                {
-                    _startStopItem.Text = "⏸ Pause Gestures (Stop)";
-                }
+                _startStopItem.Text = isPaused ? "▶ Resume Gestures (Start)" : "⏸ Pause Gestures (Stop)";
             }
 
             if (_notifyIcon != null)
@@ -169,20 +223,27 @@ public class TrayIconManager : IDisposable
                 if (!isConnected)
                 {
                     _notifyIcon.Icon = _iconDisconnected;
-                    _notifyIcon.Text = $"Logitech T650: {statusText}";
+                    _notifyIcon.Text = SafeTooltipText($"Logitech T650: {statusText}");
                 }
                 else if (isPaused)
                 {
                     _notifyIcon.Icon = _iconPaused;
-                    _notifyIcon.Text = $"Logitech T650: Paused ({statusText})";
+                    _notifyIcon.Text = SafeTooltipText($"Logitech T650: Paused ({statusText})");
                 }
                 else
                 {
                     _notifyIcon.Icon = _iconActive;
-                    _notifyIcon.Text = $"Logitech T650: Active ({statusText})";
+                    _notifyIcon.Text = SafeTooltipText($"Logitech T650: Active ({statusText})");
                 }
             }
         });
+    }
+
+    private static string SafeTooltipText(string text)
+    {
+        // NotifyIcon.Text Win32 API limit is 63 characters
+        if (string.IsNullOrEmpty(text)) return "Logitech T650";
+        return text.Length > 63 ? text.Substring(0, 60) + "..." : text;
     }
 
     public void ShowBalloon(string title, string message, ToolTipIcon icon = ToolTipIcon.Info)
