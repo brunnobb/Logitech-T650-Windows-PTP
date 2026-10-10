@@ -56,10 +56,11 @@ Device communication is decoupled from the Windows HID driver stack for stabilit
   - **4-Finger Swipe Left / Right:** Switch Virtual Desktops (`Ctrl + Win + Left` / `Ctrl + Win + Right`).
   - **4-Finger Swipe Up / Down:** Task View (`Win + Tab`) / Action Center (`Win + A`).
 
-### Tier 2: Virtual PTP Driver (`VirtualPtpDriver`) — **IN PROGRESS**
-- User-Mode Driver Framework (UMDF 2) driver based on Microsoft Virtual HID Framework (VHF).
-- Implements official Microsoft Windows Precision Touchpad (PTP) TLC Report Descriptor.
-- Exposes `IOCTL_PTP_INJECT_REPORT` for direct report submission to the Windows touch subsystem.
+### Tier 2: Virtual PTP Driver (`VirtualPtpDriver`) — **WORKING & TESTED**
+- User-Mode Driver Framework (UMDF 2.15) virtual HID minidriver targeting all versions of Windows 10 & 11.
+- Implements official Microsoft Windows Precision Touchpad (PTP) TLC Report Descriptor with 5 simultaneous contacts and ClickPad support.
+- Ultra-low latency Named Pipe IPC (`\\.\pipe\T650VirtualPtpPipe`) bypassing kernel class driver symbolic link restrictions with zero-allocation streaming.
+- Unlocks native Windows Precision Touchpad Settings in `Settings -> Bluetooth & devices -> Touchpad`.
 
 ---
 
@@ -71,39 +72,98 @@ Device communication is decoupled from the Windows HID driver stack for stabilit
 │   │   ├── Hidpp/                # Logitech Unifying HID++ 2.0 communication
 │   │   ├── Touch/                # Frame reassembler & coordinate parsing
 │   │   ├── Gesture/              # Precision Gesture Engine
-│   │   ├── Ptp/                  # Microsoft PTP touch report builders
+│   │   ├── Ptp/                  # Microsoft PTP touch report builders & IPC client
 │   │   └── Program.cs            # Entry point & interactive desktop attach
 │   └── VirtualPtpDriver/         # Tier 2: UMDF 2 Virtual PTP HID Driver (C++)
 │       ├── PtpDescriptor.h       # Microsoft PTP TLC HID Report Descriptor
 │       ├── PtpTypes.h            # IOCTL & PTP data structures
+│       ├── PipeServer.cpp/.h     # Low-latency Named Pipe IPC server
 │       ├── Driver.cpp / Device.cpp / Queue.cpp
 │       └── VirtualPtpDriver.inx  # Driver INF file
+├── Installer/                    # WiX 3.14 MSI installer packages & scripts
+│   ├── Build-All-Installers.ps1  # Automated WiX builder for all MSIs
+│   └── Bump-Version.ps1          # Unified version bump and recompile script
+├── Dist/                         # Built MSI release packages & SHA256 checksums
 ├── DEVELOPMENT_PLAN.MD           # Detailed development roadmap & phase tracking
-├── AGENTS.md                     # Agent engineering & architecture guidelines
+├── AGENTS.md                     # Architecture, driver internals & AI guide
 └── .gitignore                    # Git exclusions
 ```
 
 ---
 
-## Building and Running
+## How to Build
 
 ### Prerequisites
 * Windows 10 (1903+) or Windows 11 (x64)
-* [.NET 10 SDK](https://dotnet.microsoft.com/download)
+* [.NET 10 SDK](https://dotnet.microsoft.com/download) (or .NET 9.0/8.0)
 * Visual Studio 2022 (Community or higher) with:
   * *.NET desktop development*
   * *Desktop development with C++*
-  * *Windows Driver Kit (WDK)* (for Tier 2)
+  * *Windows Driver Kit (WDK 10)*
+* [WiX Toolset v3.14](https://wixtoolset.org/) (for building MSI installers)
+* PowerShell 7 (`pwsh`)
 
-### Running Tier 1 (Hardware Bridge Daemon)
+---
+
+### Option A: One-Step Automated Build (Recommended)
+You can compile the driver, sign it with your test certificate, compile both bridge flavors, and build all 3 MSI installers with a single command:
+
 ```powershell
-cd T650-Windows-PTP-Driver\T650Bridge
-dotnet build -c Release
-dotnet run -c Release --no-build
+# Bumps version across all source files, compiles everything, and creates installers:
+pwsh -File "Installer\Bump-Version.ps1" -NewVersion "1.1.5"
 ```
-Or run the compiled executable directly:
+The output installers will be placed in `Dist\`:
+* `Dist\VirtualPtpDriver-Setup-v1.1.5.msi`
+* `Dist\T650Bridge-PTP-Setup-v1.1.5.msi`
+* `Dist\T650Bridge-Admin-Setup-v1.1.5.msi`
+* `Dist\SHA256SUMS.txt`
+
+---
+
+### Option B: Building Components Individually
+
+#### 1. Building the Virtual PTP Driver (C++ UMDF 2)
 ```powershell
-.\bin\Release\net10.0\T650Bridge.exe
+# Compile the driver using MSBuild (Release x64):
+$msbuild = "C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe"
+& $msbuild "T650-Windows-PTP-Driver\VirtualPtpDriver\VirtualPtpDriver.vcxproj" /p:Configuration=Release /p:Platform=x64 /t:Rebuild
+
+# Copy the compiled DLL to the driver package staging directory:
+Copy-Item "T650-Windows-PTP-Driver\VirtualPtpDriver\bin\Release\VirtualPtpDriver.dll" "T650-Windows-PTP-Driver\VirtualPtpDriver\Package\VirtualPtpDriver.dll" -Force
+
+# Generate the driver catalog file:
+$inf2cat = "C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x86\Inf2Cat.exe"
+& $inf2cat /driver:"T650-Windows-PTP-Driver\VirtualPtpDriver\Package" /os:10_X64,Server10_X64
+
+# Sign the driver binary and catalog (test signing):
+$signtool = "C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\signtool.exe"
+$thumbprint = "737386A00937ED1A64A90628A02C8850D1FA5A40"
+& $signtool sign /sha1 $thumbprint /fd SHA256 /v "T650-Windows-PTP-Driver\VirtualPtpDriver\Package\VirtualPtpDriver.dll"
+& $signtool sign /sha1 $thumbprint /fd SHA256 /v "T650-Windows-PTP-Driver\VirtualPtpDriver\Package\virtualptpdriver.cat"
+```
+
+#### 2. Building the C# Bridge Daemon (.NET 10)
+The bridge can be built in two flavors:
+* **Precision Touchpad (PTP) Edition:** Communicates with the Virtual PTP driver over the named pipe to feed native Windows Precision Touchpad events.
+* **Admin Edition:** Standalone elevated edition that synthesizes inputs using Windows `SendInput` with UIPI bypass (runs without driver).
+
+```powershell
+# Build PTP Edition:
+dotnet build "T650-Windows-PTP-Driver\T650Bridge" -c Release -p:Flavor=Ptp
+
+# Build Admin Edition:
+dotnet build "T650-Windows-PTP-Driver\T650Bridge" -c Release -p:Flavor=Admin
+```
+
+To publish self-contained or framework-dependent executables:
+```powershell
+dotnet publish "T650-Windows-PTP-Driver\T650Bridge" -c Release -p:Flavor=Ptp -r win-x64 --no-self-contained -o "Installer\T650Bridge\bin\publish-ptp"
+dotnet publish "T650-Windows-PTP-Driver\T650Bridge" -c Release -p:Flavor=Admin -r win-x64 --no-self-contained -o "Installer\T650Bridge\bin\publish-admin"
+```
+
+#### 3. Building the WiX MSI Installers
+```powershell
+pwsh -File "Installer\Build-All-Installers.ps1" -Version "1.1.5"
 ```
 
 ---

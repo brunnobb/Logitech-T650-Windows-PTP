@@ -104,24 +104,36 @@ pwsh -File "Installer/Bump-Version.ps1" -NewVersion "1.1.0"
 If executing commands step-by-step:
 
 ```powershell
-# 1. Build and test Bridge .NET project (both flavors)
+# 1. Build and sign Virtual PTP Driver (C++ UMDF 2)
+$msbuild = "C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe"
+& $msbuild "T650-Windows-PTP-Driver\VirtualPtpDriver\VirtualPtpDriver.vcxproj" /p:Configuration=Release /p:Platform=x64 /t:Rebuild
+Copy-Item "T650-Windows-PTP-Driver\VirtualPtpDriver\bin\Release\VirtualPtpDriver.dll" "T650-Windows-PTP-Driver\VirtualPtpDriver\Package\VirtualPtpDriver.dll" -Force
+
+# Generate catalog & dual-sign:
+$inf2cat = "C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x86\Inf2Cat.exe"
+& $inf2cat /driver:"T650-Windows-PTP-Driver\VirtualPtpDriver\Package" /os:10_X64,Server10_X64
+$signtool = "C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\signtool.exe"
+& $signtool sign /sha1 "737386A00937ED1A64A90628A02C8850D1FA5A40" /fd SHA256 /v "T650-Windows-PTP-Driver\VirtualPtpDriver\Package\VirtualPtpDriver.dll" "T650-Windows-PTP-Driver\VirtualPtpDriver\Package\virtualptpdriver.cat"
+
+# 2. Build and publish Bridge .NET project (both flavors)
 dotnet build "T650-Windows-PTP-Driver\T650Bridge" -c Release -p:Flavor=Ptp
 dotnet build "T650-Windows-PTP-Driver\T650Bridge" -c Release -p:Flavor=Admin
+dotnet publish "T650-Windows-PTP-Driver\T650Bridge" -c Release -p:Flavor=Ptp -r win-x64 --no-self-contained -o "Installer\T650Bridge\bin\publish-ptp"
+dotnet publish "T650-Windows-PTP-Driver\T650Bridge" -c Release -p:Flavor=Admin -r win-x64 --no-self-contained -o "Installer\T650Bridge\bin\publish-admin"
 
-# 2. Build all MSI installers (with versioned names and SHA-256 hashes)
-pwsh -File "Installer\Build-All-Installers.ps1" -Version "1.1.2"
+# 3. Build all MSI installers (with versioned names and SHA-256 hashes)
+pwsh -File "Installer\Build-All-Installers.ps1" -Version "1.1.5"
 
-# 3. Output artifacts are placed in Dist\:
-#    Dist\T650Bridge-PTP-Setup-v1.1.2.msi    (PTP Driver client edition)
-#    Dist\T650Bridge-Admin-Setup-v1.1.2.msi  (Standalone Admin / UIPI bypass edition)
-#    Dist\VirtualPtpDriver-Setup-v1.1.2.msi  (Virtual PTP Driver package)
+# 4. Output artifacts are placed in Dist\:
+#    Dist\T650Bridge-PTP-Setup-v1.1.5.msi    (PTP Driver client edition)
+#    Dist\T650Bridge-Admin-Setup-v1.1.5.msi  (Standalone Admin / UIPI bypass edition)
+#    Dist\VirtualPtpDriver-Setup-v1.1.5.msi  (Virtual PTP Driver package)
 #    Dist\SHA256SUMS.txt
-#    (Convenience unversioned copies T650Bridge-PTP-Setup.msi, T650Bridge-Admin-Setup.msi, and VirtualPtpDriver-Setup.msi are also maintained)
 
-# 4. Git commit and tag release
+# 5. Git commit and tag release
 git add -u
-git commit -m "chore(release): bump version to 1.1.2"
-git tag -a v1.1.2 -m "Release v1.1.2"
+git commit -m "chore(release): bump version to 1.1.5"
+git tag -a v1.1.5 -m "Release v1.1.5"
 git push origin main --tags
 ```
 
