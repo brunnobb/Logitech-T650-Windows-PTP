@@ -6,7 +6,7 @@
   <Product Id="*"
            Name="Logitech T650 Bridge (Standalone Admin Edition)"
            Language="1033"
-           Version="1.1.4.0"
+           Version="1.1.5.0"
            Manufacturer="Logitech T650 Community Project"
            UpgradeCode="8E3B6899-28BC-4537-88EB-8B9075ACD421">
 
@@ -144,5 +144,6 @@
 
   </Product>
 </Wix>
+
 
 

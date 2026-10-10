@@ -72,7 +72,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableUAC>false</EnableUAC>
       <AdditionalLibraryDirectories>C:\Program Files (x86)\Windows Kits\10\Lib\wdf\umdf\x64\2.15;C:\Program Files (x86)\Windows Kits\10\Lib\10.0.26100.0\um\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>WdfDriverStubUm.lib;ntdll.lib;kernel32.lib;user32.lib;hid.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>WdfDriverStubUm.lib;ntdll.lib;kernel32.lib;user32.lib;advapi32.lib;hid.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -89,13 +89,14 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableUAC>false</EnableUAC>
       <AdditionalLibraryDirectories>C:\Program Files (x86)\Windows Kits\10\Lib\wdf\umdf\x64\2.15;C:\Program Files (x86)\Windows Kits\10\Lib\10.0.26100.0\um\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>WdfDriverStubUm.lib;ntdll.lib;kernel32.lib;user32.lib;hid.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>WdfDriverStubUm.lib;ntdll.lib;kernel32.lib;user32.lib;advapi32.lib;hid.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Driver.cpp" />
     <ClCompile Include="Device.cpp" />
     <ClCompile Include="Queue.cpp" />
+    <ClCompile Include="PipeServer.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Driver.h" />
@@ -103,6 +104,8 @@
     <ClInclude Include="Queue.h" />
     <ClInclude Include="PtpDescriptor.h" />
     <ClInclude Include="PtpTypes.h" />
+    <ClInclude Include="PipeServer.h" />
+    <ClInclude Include="Trace.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="VirtualPtpDriver.inx" />

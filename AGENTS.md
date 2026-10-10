@@ -138,3 +138,178 @@ git push origin main --tags
   - **Command:** `"C:\Program Files\Logitech T650 PTP\Bridge-Admin\T650Bridge.exe" --silent`
   - **Trigger:** At logon, runs with Highest Privileges (`/rl highest`) **silently without any UAC prompt**, allowing uninterrupted mouse movement across elevated Administrator windows.
 
+---
+
+## Complete Build & Release Tutorial (Developer & AI Guide)
+
+This section provides the end-to-end tutorial for building, signing, packaging, testing, and releasing both tiers of the Logitech T650 Windows PTP solution.
+
+### 1. Prerequisites & Environment Setup
+
+Before building the driver or installers, verify that the following tools are installed:
+
+| Tool | Recommended Version / Path | Purpose |
+| :--- | :--- | :--- |
+| **Visual Studio 2022** | Community/Professional 17.10+ with Desktop C++ workload | Compiles the C++ UMDF 2 driver (`VirtualPtpDriver.vcxproj`). |
+| **Windows Driver Kit (WDK)** | WDK 10 (Build 10.0.26100.0 or compatible) | Provides driver headers, `Inf2Cat.exe`, `signtool.exe`, and `WdfDriverStubUm.lib`. |
+| **.NET SDK** | .NET 10.0 (or .NET 9.0/8.0) | Compiles the C# Hardware Bridge Daemon (`T650Bridge.csproj`). |
+| **WiX Toolset** | WiX Toolset v3.14 (`C:\Program Files (x86)\WiX Toolset v3.14\bin`) | Compiles `.wxs` source into Windows Installer (`.msi`) packages. |
+| **PowerShell 7** | `pwsh` | Runs orchestration scripts (`Bump-Version.ps1`, `Build-All-Installers.ps1`). |
+
+#### Certificate Setup (Required for Test Signing)
+The UMDF driver package must be test-signed for Windows to install it under `testsigning on`:
+1. Generate or verify the local self-signed code signing certificate:
+   ```powershell
+   # If not already created:
+   $cert = New-SelfSignedCertificate -Type CodeSigningCert -Subject "CN=T650 Virtual PTP Test" -CertStoreLocation "Cert:\CurrentUser\My"
+   # Export to Package folder:
+   Export-Certificate -Cert $cert -FilePath "T650-Windows-PTP-Driver\VirtualPtpDriver\Package\T650TestCert.cer"
+   # Install to Trusted Root:
+   Import-Certificate -CertStoreLocation "Cert:\LocalMachine\Root" -FilePath "T650-Windows-PTP-Driver\VirtualPtpDriver\Package\T650TestCert.cer"
+   ```
+2. Note the Certificate Thumbprint (`737386A00937ED1A64A90628A02C8850D1FA5A40`).
+
+---
+
+### 2. Solution Architecture & Key Configurations
+
+#### Driver Compatibility (UMDF 2.15 Target)
+* **Framework Version:** The driver targets **UMDF 2.15** (`UmdfLibraryVersion = 2.15.0`).
+* **Why 2.15:** UMDF 2.15 is universally present on **all versions of Windows 10 (1507 through 22H2) and Windows 11 (21H2 through 24H2)**. Targeting higher versions like 2.35 causes older OS builds to fail loading with `STATUS_INVALID_PARAMETER` (`3489660941` / `0xD000000D`).
+* **C Runtime:** Configured with `/MT` (Multi-threaded static CRT) so the driver DLL has zero dependencies on external Visual C++ Redistributable packages.
+* **Driver Interface:** Exposes `GUID_DEVINTERFACE_T650_VIRTUAL_PTP` (`{A50E5B44-5D88-4A56-BE34-F18A56DF762B}`).
+
+#### Bridge Daemon Flavors
+* **PTP Edition (`Flavor=Ptp`):** Talks directly to `VirtualPtpDriver` via `IOCTL_PTP_INJECT_REPORT` (`0x00222004`) to feed Windows native multi-touch gesture events. Autostarts via HKCU Run registry key.
+* **Admin Edition (`Flavor=Admin`):** Standalone edition that synthesizes inputs using Windows `SendInput` with UIPI bypass (runs with highest privilege via Windows Task Scheduler at logon).
+
+---
+
+### 3. Automated One-Step Build & Release (Recommended)
+
+To bump the version across all files, rebuild both C# bridge flavors, compile and sign the driver, build all 3 MSIs, and generate checksums:
+
+```powershell
+# 1. Run automated bump script (e.g. for version 1.1.4):
+pwsh -File "Installer\Bump-Version.ps1" -NewVersion "1.1.4"
+
+# 2. Review git status:
+git status
+
+# 3. Commit, tag, and push:
+git add -u
+git commit -m "chore(release): bump version to 1.1.4"
+git tag -a v1.1.4 -m "Release v1.1.4"
+git push origin main --tags
+```
+
+All output artifacts are generated into [`Dist/`](file:///c:/Workspace/T650-Windows-PTP/Dist/):
+* `VirtualPtpDriver-Setup-v<Version>.msi` (and `VirtualPtpDriver-Setup.msi`)
+* `T650Bridge-PTP-Setup-v<Version>.msi` (and `T650Bridge-PTP-Setup.msi`)
+* `T650Bridge-Admin-Setup-v<Version>.msi` (and `T650Bridge-Admin-Setup.msi`)
+* `SHA256SUMS.txt`
+
+---
+
+### 4. Manual Step-by-Step Build Process
+
+If you need to compile components individually for debugging or custom packaging:
+
+#### Step 4.1: Build the Virtual PTP Driver (C++ UMDF)
+```powershell
+# Locate MSBuild:
+$msbuild = "C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe"
+
+# Rebuild driver project:
+& $msbuild "T650-Windows-PTP-Driver\VirtualPtpDriver\VirtualPtpDriver.vcxproj" /p:Configuration=Release /p:Platform=x64 /t:Rebuild
+
+# Copy output DLL to driver Package staging directory:
+Copy-Item "T650-Windows-PTP-Driver\VirtualPtpDriver\bin\Release\VirtualPtpDriver.dll" "T650-Windows-PTP-Driver\VirtualPtpDriver\Package\VirtualPtpDriver.dll" -Force
+```
+
+#### Step 4.2: Generate Catalog & Sign Driver Package
+```powershell
+# 1. Run Inf2Cat to validate and create catalog:
+$inf2cat = "C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x86\Inf2Cat.exe"
+& $inf2cat /driver:"T650-Windows-PTP-Driver\VirtualPtpDriver\Package" /os:10_X64,Server10_X64
+
+# 2. Dual-sign the catalog and binary:
+$signtool = "C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\signtool.exe"
+$thumbprint = "737386A00937ED1A64A90628A02C8850D1FA5A40"
+& $signtool sign /sha1 $thumbprint /fd SHA256 /v "T650-Windows-PTP-Driver\VirtualPtpDriver\Package\VirtualPtpDriver.dll"
+& $signtool sign /sha1 $thumbprint /fd SHA256 /v "T650-Windows-PTP-Driver\VirtualPtpDriver\Package\virtualptpdriver.cat"
+```
+
+#### Step 4.3: Build Bridge Daemon (.NET)
+```powershell
+# Build PTP Flavor:
+dotnet build "T650-Windows-PTP-Driver\T650Bridge" -c Release -p:Flavor=Ptp
+dotnet publish "T650-Windows-PTP-Driver\T650Bridge" -c Release -p:Flavor=Ptp -r win-x64 --no-self-contained -o "Installer\T650Bridge\bin\publish-ptp"
+
+# Build Admin Flavor:
+dotnet build "T650-Windows-PTP-Driver\T650Bridge" -c Release -p:Flavor=Admin
+dotnet publish "T650-Windows-PTP-Driver\T650Bridge" -c Release -p:Flavor=Admin -r win-x64 --no-self-contained -o "Installer\T650Bridge\bin\publish-admin"
+```
+
+#### Step 4.4: Build WiX MSI Packages
+```powershell
+# Package all MSIs and generate SHA256 hashes:
+pwsh -File "Installer\Build-All-Installers.ps1" -Version "1.1.4"
+```
+
+---
+
+### 5. Testing & Diagnostics on a Windows VM
+
+To test the driver in a virtual machine (Hyper-V, VMware, or physical machine):
+
+#### 1. Enable Test-Signing on the Test Machine
+Open PowerShell / CMD as Administrator on the target VM and run:
+```powershell
+bcdedit /set testsigning on
+Restart-Computer
+```
+*(Verify the "Test Mode" watermark appears in the lower-right corner of the desktop.)*
+
+#### 2. Install the Driver Package
+Run the generated `VirtualPtpDriver-Setup-v<Version>.msi`.
+The installer will:
+1. Install `T650TestCert.cer` into `Root` and `TrustedPublisher` stores.
+2. Call `devcon.exe install VirtualPtpDriver.inf Root\T650VirtualPtp` to create the virtual devnode.
+
+#### 3. Real-Time Tracing via Sysinternals DebugView
+The driver DLL contains built-in trace logging through `OutputDebugStringW`:
+1. Run `Dbgview.exe` as **Administrator**.
+2. Go to **Capture** and verify:
+   * **Capture Win32** is checked.
+   * **Capture Global Win32** is checked *(essential for user-mode system drivers running inside `WUDFHost.exe`)*.
+3. Filter (Ctrl+L) on `[VirtualPtpDriver]`.
+4. Observe real-time initialization and IOCTL dispatch events:
+   ```text
+   [VirtualPtpDriver] DriverEntry called. RegistryPath=...
+   [VirtualPtpDriver] EvtDeviceAdd called
+   [VirtualPtpDriver] DeviceCreate: Setting filter...
+   [VirtualPtpDriver] DeviceCreate: WdfDeviceCreate status=0x00000000
+   [VirtualPtpDriver] QueueInitialize: WdfIoQueueCreate (default) status=0x00000000
+   [VirtualPtpDriver] EvtIoDeviceControl: IOCTL=0x000B0003 (InLen=0, OutLen=9)
+   [VirtualPtpDriver] -> IOCTL_HID_GET_DEVICE_DESCRIPTOR: descSize=9, reportDescLen=565, status=0x00000000
+   ```
+
+#### 4. Checking Event Viewer (UMDF Operational Log)
+If the driver fails to start:
+1. Enable the UMDF operational log (disabled by default in Windows):
+   ```powershell
+   wevtutil sl Microsoft-Windows-DriverFrameworks-UserMode/Operational /e:true
+   ```
+2. Open `eventvwr.msc` and navigate to:
+   $$\text{Applications and Services Logs} \rightarrow \text{Microsoft} \rightarrow \text{Windows} \rightarrow \text{DriverFrameworks-UserMode} \rightarrow \text{Operational}$$
+3. Query the latest events via PowerShell:
+   ```powershell
+   Get-WinEvent -LogName "Microsoft-Windows-DriverFrameworks-UserMode/Operational" -MaxEvents 30 | Format-Table TimeCreated, Id, Message -Wrap
+   ```
+4. Check the SetupAPI log for device installation details:
+   ```powershell
+   Get-Content C:\Windows\INF\setupapi.dev.log -Tail 150 | Select-String -Pattern "HIDCLASS|VirtualPtp|mshidumdf|WUDFRd|Exit status"
+   ```
+
+

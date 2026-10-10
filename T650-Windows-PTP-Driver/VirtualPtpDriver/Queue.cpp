@@ -56,7 +56,6 @@ static NTSTATUS RequestCopyFromBuffer(
     status = WdfMemoryCopyFromBuffer(memory, 0, SourceBuffer, NumBytesToCopyFrom);
     if (NT_SUCCESS(status)) {
         WdfRequestSetInformation(Request, NumBytesToCopyFrom);
-        PtpLog(L"[VirtualPtpDriver] RequestCopyFromBuffer: copied %zu bytes\n", NumBytesToCopyFrom);
     } else {
         PtpLog(L"[VirtualPtpDriver] RequestCopyFromBuffer: WdfMemoryCopyFromBuffer failed 0x%08X\n", status);
     }
@@ -384,8 +383,10 @@ VOID EvtIoDeviceControl(
     PDEVICE_CONTEXT context = DeviceGetContext(device);
     BOOLEAN completeRequest = TRUE;
 
-    PtpLog(L"[VirtualPtpDriver] EvtIoDeviceControl: IOCTL=0x%08X (InLen=%zu, OutLen=%zu)\n",
-        IoControlCode, InputBufferLength, OutputBufferLength);
+    if (IoControlCode != IOCTL_HID_READ_REPORT && IoControlCode != IOCTL_PTP_INJECT_REPORT) {
+        PtpLog(L"[VirtualPtpDriver] EvtIoDeviceControl: IOCTL=0x%08X (InLen=%zu, OutLen=%zu)\n",
+            IoControlCode, InputBufferLength, OutputBufferLength);
+    }
 
     switch (IoControlCode)
     {
@@ -430,14 +431,16 @@ VOID EvtIoDeviceControl(
 
     case IOCTL_HID_READ_REPORT:
     {
+        static LONG s_ReadCount = 0;
+        if (InterlockedIncrement(&s_ReadCount) == 1) {
+            PtpLog(L"[VirtualPtpDriver] -> First IOCTL_HID_READ_REPORT received from OS touch stack.\n");
+        }
         // Forward read request to manual report queue
         // It stays pending until an input report is injected from the bridge
         status = WdfRequestForwardToIoQueue(Request, context->ManualReportQueue);
         if (!NT_SUCCESS(status)) {
             PtpLog(L"[VirtualPtpDriver] -> IOCTL_HID_READ_REPORT: WdfRequestForwardToIoQueue failed 0x%08X\n", status);
             WdfRequestComplete(Request, status);
-        } else {
-            PtpLog(L"[VirtualPtpDriver] -> IOCTL_HID_READ_REPORT: forwarded to manual queue (pending)\n");
         }
         return;
     }
@@ -545,14 +548,7 @@ VOID EvtIoDeviceControl(
         PVOID reportBuffer = NULL;
         status = WdfRequestRetrieveInputBuffer(Request, InputBufferLength, &reportBuffer, NULL);
         if (NT_SUCCESS(status) && reportBuffer != NULL) {
-            // Check if there is a pending read request from the HID class driver
-            WDFREQUEST pendingReadRequest = NULL;
-            NTSTATUS queueStatus = WdfIoQueueRetrieveNextRequest(context->ManualReportQueue, &pendingReadRequest);
-            if (NT_SUCCESS(queueStatus) && pendingReadRequest != NULL) {
-                NTSTATUS copyStatus = RequestCopyFromBuffer(pendingReadRequest, reportBuffer, InputBufferLength);
-                WdfRequestComplete(pendingReadRequest, copyStatus);
-            }
-            // Complete the inject request successfully
+            InjectTouchReport(context, reportBuffer, InputBufferLength);
             WdfRequestSetInformation(Request, InputBufferLength);
             status = STATUS_SUCCESS;
         }
@@ -572,3 +568,25 @@ VOID EvtIoDeviceControl(
         WdfRequestComplete(Request, status);
     }
 }
+
+NTSTATUS InjectTouchReport(PVOID ContextPtr, PVOID ReportBuffer, size_t ReportSize)
+{
+    PDEVICE_CONTEXT context = (PDEVICE_CONTEXT)ContextPtr;
+    if (context == NULL || context->ManualReportQueue == NULL) {
+        return STATUS_INVALID_DEVICE_STATE;
+    }
+
+    WDFREQUEST pendingReadRequest = NULL;
+    NTSTATUS queueStatus = WdfIoQueueRetrieveNextRequest(context->ManualReportQueue, &pendingReadRequest);
+    if (NT_SUCCESS(queueStatus) && pendingReadRequest != NULL) {
+        static LONG s_InjectCount = 0;
+        if (InterlockedIncrement(&s_InjectCount) == 1) {
+            PtpLog(L"[VirtualPtpDriver] -> First touch report successfully injected into OS touch stack.\n");
+        }
+        NTSTATUS copyStatus = RequestCopyFromBuffer(pendingReadRequest, ReportBuffer, ReportSize);
+        WdfRequestComplete(pendingReadRequest, copyStatus);
+        return copyStatus;
+    }
+    return STATUS_SUCCESS;
+}
+

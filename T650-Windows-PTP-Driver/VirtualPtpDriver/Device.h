@@ -18,3 +18,7 @@ typedef struct _DEVICE_CONTEXT {
 WDF_DECLARE_CONTEXT_TYPE_WITH_NAME(DEVICE_CONTEXT, DeviceGetContext)
 
 NTSTATUS DeviceCreate(_Inout_ PWDFDEVICE_INIT DeviceInit);
+
+EVT_WDF_DEVICE_FILE_CREATE EvtDeviceFileCreate;
+EVT_WDF_FILE_CLOSE         EvtFileClose;
+EVT_WDF_FILE_CLEANUP       EvtFileCleanup;
