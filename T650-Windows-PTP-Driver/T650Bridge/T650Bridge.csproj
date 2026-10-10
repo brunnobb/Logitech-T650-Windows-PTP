@@ -9,9 +9,9 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <RootNamespace>T650Bridge</RootNamespace>
     <ApplicationIcon>T650.ico</ApplicationIcon>
-    <Version>1.1.5</Version>
-    <AssemblyVersion>1.1.5.0</AssemblyVersion>
-    <FileVersion>1.1.5.0</FileVersion>
+    <Version>1.1.6</Version>
+    <AssemblyVersion>1.1.6.0</AssemblyVersion>
+    <FileVersion>1.1.6.0</FileVersion>
     <Flavor Condition="'$(Flavor)' == ''">Ptp</Flavor>
   </PropertyGroup>
 
@@ -32,6 +32,7 @@
   </ItemGroup>
 
 </Project>
+
 
 
 

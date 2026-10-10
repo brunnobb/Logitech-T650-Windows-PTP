@@ -110,12 +110,12 @@ You can compile the driver, sign it with your test certificate, compile both bri
 
 ```powershell
 # Bumps version across all source files, compiles everything, and creates installers:
-pwsh -File "Installer\Bump-Version.ps1" -NewVersion "1.1.5"
+pwsh -File "Installer\Bump-Version.ps1" -NewVersion "1.1.6"
 ```
 The output installers will be placed in `Dist\`:
-* `Dist\VirtualPtpDriver-Setup-v1.1.5.msi`
-* `Dist\T650Bridge-PTP-Setup-v1.1.5.msi`
-* `Dist\T650Bridge-Admin-Setup-v1.1.5.msi`
+* `Dist\VirtualPtpDriver-Setup-v1.1.6.msi`
+* `Dist\T650Bridge-PTP-Setup-v1.1.6.msi`
+* `Dist\T650Bridge-Admin-Setup-v1.1.6.msi`
 * `Dist\SHA256SUMS.txt`
 
 ---
@@ -145,7 +145,7 @@ $thumbprint = "737386A00937ED1A64A90628A02C8850D1FA5A40"
 #### 2. Building the C# Bridge Daemon (.NET 10)
 The bridge can be built in two flavors:
 * **Precision Touchpad (PTP) Edition:** Communicates with the Virtual PTP driver over the named pipe to feed native Windows Precision Touchpad events.
-* **Admin Edition:** Standalone elevated edition that synthesizes inputs using Windows `SendInput` with UIPI bypass (runs without driver).
+* **Admin Edition:** Standalone edition with Microsoft `uiAccess="true"` (UIAccess privilege) that synthesizes inputs using Windows `SendInput` with native UIPI bypass across all admin windows.
 
 ```powershell
 # Build PTP Edition:
@@ -163,7 +163,7 @@ dotnet publish "T650-Windows-PTP-Driver\T650Bridge" -c Release -p:Flavor=Admin -
 
 #### 3. Building the WiX MSI Installers
 ```powershell
-pwsh -File "Installer\Build-All-Installers.ps1" -Version "1.1.5"
+pwsh -File "Installer\Build-All-Installers.ps1" -Version "1.1.6"
 ```
 
 ---

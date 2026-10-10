@@ -74,6 +74,21 @@ function Build-MsiPackage {
         Copy-Item $sourceIco -Destination $flavorPublishDir -Force
     }
 
+    # Copy Test Certificate into publish directory so MSI can install it into Root/Publisher
+    $sourceCert = Join-Path $repoRoot "T650-Windows-PTP-Driver\VirtualPtpDriver\Package\T650TestCert.cer"
+    if (Test-Path $sourceCert) {
+        Copy-Item $sourceCert -Destination $flavorPublishDir -Force
+    }
+
+    # Digitally sign T650Bridge.exe with Authenticode certificate (required by Windows for uiAccess="true")
+    $signtool = "C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\signtool.exe"
+    $thumbprint = "737386A00937ED1A64A90628A02C8850D1FA5A40"
+    $publishedExe = Join-Path $flavorPublishDir "T650Bridge.exe"
+    if ((Test-Path $signtool) -and (Test-Path $publishedExe)) {
+        Write-Host "Signing $publishedExe for Authenticode / UIAccess..." -ForegroundColor Cyan
+        & $signtool sign /sha1 $thumbprint /fd SHA256 /v $publishedExe
+    }
+
     # 2. Compile WiX Source
     Write-Host "2/4 Compiling WiX with candle.exe..." -ForegroundColor Cyan
     $wxsPath = Join-Path $scriptDir $WxsFileName

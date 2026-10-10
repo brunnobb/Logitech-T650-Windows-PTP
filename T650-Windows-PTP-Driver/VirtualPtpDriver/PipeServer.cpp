@@ -15,10 +15,11 @@ static DWORD WINAPI PipeThreadProc(LPVOID lpParam)
     PDEVICE_CONTEXT context = (PDEVICE_CONTEXT)lpParam;
     PtpLog(L"[VirtualPtpDriver] Named Pipe server starting on \\\\.\\pipe\\T650VirtualPtpPipe...\n");
 
-    // Security descriptor: allow Everyone (WD), Admins (BA), SYSTEM (SY) + Low Integrity (LW)
+    // Security descriptor: allow Everyone (WD), Admins (BA), SYSTEM (SY)
+    // Mandatory Label: Medium Integrity (ME) -> strictly blocks sandboxed browser processes & low-integrity malware
     PSECURITY_DESCRIPTOR pSD = NULL;
     BOOL sddlOk = ConvertStringSecurityDescriptorToSecurityDescriptorW(
-        L"D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;WD)S:(ML;;NW;;;LW)",
+        L"D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;WD)S:(ML;;NW;;;ME)",
         SDDL_REVISION_1,
         &pSD,
         NULL
@@ -30,11 +31,15 @@ static DWORD WINAPI PipeThreadProc(LPVOID lpParam)
     SECURITY_ATTRIBUTES sa = { sizeof(SECURITY_ATTRIBUTES), pSD, FALSE };
 
     while (g_Running) {
+        // Hardened pipe creation:
+        // - FILE_FLAG_FIRST_PIPE_INSTANCE: prevents rogue processes from pre-creating or squatting on the pipe
+        // - PIPE_REJECT_REMOTE_CLIENTS: rejects any remote/network connections (local machine only)
+        // - nMaxInstances = 1: exclusive single-client lock; bridge holds connection exclusively
         HANDLE hPipe = CreateNamedPipeW(
             L"\\\\.\\pipe\\T650VirtualPtpPipe",
-            PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED,
-            PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
-            PIPE_UNLIMITED_INSTANCES,
+            PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED | FILE_FLAG_FIRST_PIPE_INSTANCE,
+            PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT | PIPE_REJECT_REMOTE_CLIENTS,
+            1,
             4096,
             4096,
             0,
@@ -68,6 +73,29 @@ static DWORD WINAPI PipeThreadProc(LPVOID lpParam)
             }
         }
         CloseHandle(ovConnect.hEvent);
+
+        // Security check: verify client belongs to active console session (blocks remote/background session hijacking)
+        if (ImpersonateNamedPipeClient(hPipe)) {
+            HANDLE hToken = NULL;
+            if (OpenThreadToken(GetCurrentThread(), TOKEN_QUERY, TRUE, &hToken)) {
+                DWORD clientSessionId = 0;
+                DWORD retLen = 0;
+                if (GetTokenInformation(hToken, TokenSessionId, &clientSessionId, sizeof(clientSessionId), &retLen)) {
+                    DWORD activeConsole = WTSGetActiveConsoleSessionId();
+                    if (activeConsole != 0xFFFFFFFF && clientSessionId != activeConsole) {
+                        PtpLog(L"[VirtualPtpDriver] Security Rejection: client session %lu does not match active console %lu.\n",
+                            clientSessionId, activeConsole);
+                        CloseHandle(hToken);
+                        RevertToSelf();
+                        DisconnectNamedPipe(hPipe);
+                        CloseHandle(hPipe);
+                        continue;
+                    }
+                }
+                CloseHandle(hToken);
+            }
+            RevertToSelf();
+        }
 
         PtpLog(L"[VirtualPtpDriver] T650 Bridge connected to Named Pipe! Live touch injection active.\n");
 

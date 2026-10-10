@@ -22,9 +22,11 @@ class Program
 #endif
 
         bool adminMode = compiledAsAdmin || args.Contains("--admin") || args.Contains("--standalone");
+        bool hasUiAccess = HasUiAccess();
         bool isElevated = IsElevated();
+        bool canBypassUipi = isElevated || hasUiAccess;
 
-        if (adminMode && !isElevated)
+        if (adminMode && !canBypassUipi)
         {
             try
             {
@@ -56,10 +58,18 @@ class Program
         Console.ResetColor();
 
         Console.WriteLine($"[Version] Bridge Daemon v{version} ({edition})");
-        Console.WriteLine($"[Security] Elevation: {(isElevated ? "Administrator (UIPI Bypass Active)" : "Standard User (Medium Integrity)")}");
-        if (!isElevated)
+        string securityStatus;
+        if (hasUiAccess)
+            securityStatus = "Standard User (UIAccess Active - UIPI Bypass Enabled)";
+        else if (isElevated)
+            securityStatus = "Administrator (UIPI Bypass Active)";
+        else
+            securityStatus = "Standard User (Medium Integrity)";
+
+        Console.WriteLine($"[Security] Elevation: {securityStatus}");
+        if (!canBypassUipi)
         {
-            Console.WriteLine("[Security] Notice: Run as Administrator or install Virtual PTP Driver to control Admin windows.");
+            Console.WriteLine("[Security] Notice: Run with UIAccess / Administrator or install Virtual PTP Driver to control Admin windows.");
         }
         bool enableGestures = !args.Contains("--no-gesture");
         bool enableNotifications = args.Contains("--notifications") || args.Contains("--balloon");
@@ -151,7 +161,7 @@ class Program
         bool silentStartup = args.Contains("--silent") || args.Contains("--tray") || args.Contains("--minimized");
         bool autoHide = !args.Contains("--console") && !args.Contains("--no-hide");
 
-        using var tray = new TrayIconManager(adminMode, isElevated);
+        using var tray = new TrayIconManager(adminMode, canBypassUipi);
         tray.EnableNotifications = enableNotifications;
         tray.UpdateState(DeviceConnectionState.SearchingForReceiver, isPaused: !enableGestures);
 
@@ -337,6 +347,42 @@ class Program
 
     [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
     private struct POINT { public int X; public int Y; }
+
+    [System.Runtime.InteropServices.DllImport("advapi32.dll", SetLastError = true)]
+    private static extern bool OpenProcessToken(IntPtr ProcessHandle, uint DesiredAccess, out IntPtr TokenHandle);
+
+    [System.Runtime.InteropServices.DllImport("advapi32.dll", SetLastError = true)]
+    private static extern bool GetTokenInformation(IntPtr TokenHandle, int TokenInformationClass, out uint TokenInformation, uint TokenInformationLength, out uint ReturnLength);
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool CloseHandle(IntPtr hObject);
+
+    private const uint TOKEN_QUERY = 0x0008;
+    private const int TokenUIAccess = 26;
+
+    private static bool HasUiAccess()
+    {
+        try
+        {
+            using var proc = Process.GetCurrentProcess();
+            if (OpenProcessToken(proc.Handle, TOKEN_QUERY, out IntPtr hToken))
+            {
+                try
+                {
+                    if (GetTokenInformation(hToken, TokenUIAccess, out uint uiAccess, sizeof(uint), out _))
+                    {
+                        return uiAccess != 0;
+                    }
+                }
+                finally
+                {
+                    CloseHandle(hToken);
+                }
+            }
+        }
+        catch { }
+        return false;
+    }
 
     private static bool IsElevated()
     {

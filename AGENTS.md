@@ -122,18 +122,18 @@ dotnet publish "T650-Windows-PTP-Driver\T650Bridge" -c Release -p:Flavor=Ptp -r 
 dotnet publish "T650-Windows-PTP-Driver\T650Bridge" -c Release -p:Flavor=Admin -r win-x64 --no-self-contained -o "Installer\T650Bridge\bin\publish-admin"
 
 # 3. Build all MSI installers (with versioned names and SHA-256 hashes)
-pwsh -File "Installer\Build-All-Installers.ps1" -Version "1.1.5"
+pwsh -File "Installer\Build-All-Installers.ps1" -Version "1.1.6"
 
 # 4. Output artifacts are placed in Dist\:
-#    Dist\T650Bridge-PTP-Setup-v1.1.5.msi    (PTP Driver client edition)
-#    Dist\T650Bridge-Admin-Setup-v1.1.5.msi  (Standalone Admin / UIPI bypass edition)
-#    Dist\VirtualPtpDriver-Setup-v1.1.5.msi  (Virtual PTP Driver package)
+#    Dist\T650Bridge-PTP-Setup-v1.1.6.msi    (PTP Driver client edition)
+#    Dist\T650Bridge-Admin-Setup-v1.1.6.msi  (Standalone Admin / UIAccess UIPI bypass edition)
+#    Dist\VirtualPtpDriver-Setup-v1.1.6.msi  (Virtual PTP Driver package)
 #    Dist\SHA256SUMS.txt
 
 # 5. Git commit and tag release
 git add -u
-git commit -m "chore(release): bump version to 1.1.5"
-git tag -a v1.1.5 -m "Release v1.1.5"
+git commit -m "chore(release): bump version to 1.1.6"
+git tag -a v1.1.6 -m "Release v1.1.6"
 git push origin main --tags
 ```
 
@@ -146,9 +146,10 @@ git push origin main --tags
   - **Behavior:** Visible in Windows Task Manager $\rightarrow$ **Startup apps** tab as **"Logitech T650 Bridge"**.
 
 * **Admin Edition:**
-  - **Task Scheduler:** `Logitech T650 Bridge Admin`
+  - **Registry Key:** `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`
+  - **Entry Name:** `Logitech T650 Bridge Admin`
   - **Command:** `"C:\Program Files\Logitech T650 PTP\Bridge-Admin\T650Bridge.exe" --silent`
-  - **Trigger:** At logon, runs with Highest Privileges (`/rl highest`) **silently without any UAC prompt**, allowing uninterrupted mouse movement across elevated Administrator windows.
+  - **Behavior:** Visible in Windows Task Manager $\rightarrow$ **Startup apps** tab as **"Logitech T650 Bridge Admin"**. Runs silently at logon with Microsoft `uiAccess="true"` (UIAccess token privilege), granting native UIPI bypass across all Administrator windows without UAC prompts or Task Scheduler hacks.
 
 ---
 
