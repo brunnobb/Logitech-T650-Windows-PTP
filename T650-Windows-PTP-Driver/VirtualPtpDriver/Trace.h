@@ -24,7 +24,7 @@ inline void PtpLog(const WCHAR* format, ...)
             hEventSource,
             EVENTLOG_INFORMATION_TYPE,
             0,
-            1001,
+            0,
             NULL,
             1,
             0,
